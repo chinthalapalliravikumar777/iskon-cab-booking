@@ -38,8 +38,6 @@ export class AuthStack extends cdk.Stack {
       customAttributes: {
         // The user's role: CGM, DRIVER, or ADMIN
         role: new cognito.StringAttribute({ mutable: true }),
-        // The user's full name
-        name: new cognito.StringAttribute({ mutable: true }),
         // The user's mobile number
         mobile: new cognito.StringAttribute({ mutable: true }),
       },

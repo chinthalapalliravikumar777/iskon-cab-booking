@@ -24,10 +24,11 @@ export function getCallerIdentity(event: APIGatewayProxyEvent): CallerIdentity |
     if (!claims) return null
 
     // Cognito puts custom attributes under "custom:role" etc.
-    const role = (claims['custom:role'] || claims['cognito:groups']?.[0]) as UserRole
+    // The user's name is stored in the standard "name" attribute
+    const role = (claims['custom:role']) as UserRole
     const userId = claims['sub'] as string
     const email = claims['email'] as string
-    const name = (claims['custom:name'] || claims['name'] || email) as string
+    const name = (claims['name'] || email) as string
 
     if (!userId || !role) return null
 

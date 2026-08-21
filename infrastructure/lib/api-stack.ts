@@ -51,6 +51,13 @@ export class ApiStack extends cdk.Stack {
 
     // ── Helper to create a Lambda function ──────────────────────────────────
     const createLambda = (name: string, handlerPath: string) => {
+      // Create a dedicated CloudWatch log group for each Lambda function
+      const logGroup = new logs.LogGroup(this, `${name}LogGroup`, {
+        logGroupName: `/aws/lambda/iskon-${name.toLowerCase()}`,
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      })
+
       const fn = new lambda.Function(this, name, {
         functionName: `iskon-${name.toLowerCase()}`,
         runtime: lambda.Runtime.NODEJS_20_X,
@@ -60,8 +67,7 @@ export class ApiStack extends cdk.Stack {
         environment: sharedEnv,
         timeout: cdk.Duration.seconds(30),
         memorySize: 256,
-        // Send all Lambda logs to CloudWatch
-        logRetention: logs.RetentionDays.ONE_MONTH,
+        logGroup,
       })
 
       // Grant this Lambda read/write access to all tables
