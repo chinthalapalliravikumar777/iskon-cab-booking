@@ -2,6 +2,7 @@ import AppLayout from '../../components/layout/AppLayout'
 import { useAuth } from '../../context/AuthContext'
 import apiClient from '../../api/client'
 import { useEffect, useState } from 'react'
+import ProfileAvatar from '../../components/common/ProfileAvatar'
 
 type ManagedRole = 'CGM' | 'DRIVER'
 type AccountFilter = 'ALL' | ManagedRole
@@ -107,6 +108,18 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const uploadPhoto = async (account: CreatedUser, file?: File) => {
+    if (!file || !account.userId) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError('Profile photos must be JPEG, PNG, or WebP.'); return }
+    if (file.size > 5 * 1024 * 1024) { setError('Profile photos must be 5 MB or smaller.'); return }
+    setError('')
+    try {
+      const response = await apiClient.put(`/v1/profile-photos/${encodeURIComponent(account.userId)}`, undefined, { headers: { 'Content-Type': file.type, 'Content-Length': file.size } })
+      await fetch(response.data.data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+      setMessage(`Profile photo uploaded for ${account.name}.`)
+    } catch { setError('Could not upload the profile photo.') }
   }
 
   return (
@@ -221,8 +234,8 @@ export default function AdminDashboard() {
             </div>
           </div>
           <table className="w-full text-left text-sm">
-            <thead><tr className="border-b border-gray-100 text-gray-500"><th className="py-2 pr-4">Role</th><th className="py-2 pr-4">Name</th><th className="py-2 pr-4">Login ID</th><th className="py-2 pr-4">Mobile</th><th className="py-2">Status</th></tr></thead>
-            <tbody>{filteredUsers.map(created => <tr key={`${created.role}-${created.email}`} className="border-b border-gray-50"><td className="py-2 pr-4"><span className={`badge-${created.role.toLowerCase()}`}>{created.role}</span></td><td className="py-2 pr-4">{created.name}</td><td className="py-2 pr-4">{created.email}</td><td className="py-2 pr-4">{created.mobile || '-'}</td><td className="py-2">{created.enabled === false ? 'Disabled' : created.status === 'FORCE_CHANGE_PASSWORD' ? 'Password setup pending' : 'Active'}</td></tr>)}</tbody>
+            <thead><tr className="border-b border-gray-100 text-gray-500"><th className="py-2 pr-4">Profile</th><th className="py-2 pr-4">Role</th><th className="py-2 pr-4">Name</th><th className="py-2 pr-4">Login ID</th><th className="py-2 pr-4">Mobile</th><th className="py-2">Status</th></tr></thead>
+            <tbody>{filteredUsers.map(created => <tr key={`${created.role}-${created.email}`} className="border-b border-gray-50"><td className="py-2 pr-4"><div className="flex items-center gap-2"><ProfileAvatar userId={created.userId} name={created.name} size="sm" /><label className="cursor-pointer text-xs font-semibold text-blue-700">Upload<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => void uploadPhoto(created, event.target.files?.[0])} /></label></div></td><td className="py-2 pr-4"><span className={`badge-${created.role.toLowerCase()}`}>{created.role}</span></td><td className="py-2 pr-4">{created.name}</td><td className="py-2 pr-4">{created.email}</td><td className="py-2 pr-4">{created.mobile || '-'}</td><td className="py-2">{created.enabled === false ? 'Disabled' : created.status === 'FORCE_CHANGE_PASSWORD' ? 'Password setup pending' : 'Active'}</td></tr>)}</tbody>
           </table>
           {filteredUsers.length === 0 && <p className="py-6 text-center text-sm text-gray-400">No accounts found for this filter.</p>}
         </div>

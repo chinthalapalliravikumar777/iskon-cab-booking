@@ -8,6 +8,7 @@ import * as cognito from 'aws-cdk-lib/aws-cognito'
 import * as logs from 'aws-cdk-lib/aws-logs'
 import { Construct } from 'constructs'
 import * as path from 'path'
+import * as s3 from 'aws-cdk-lib/aws-s3'
 
 interface ApiStackProps extends cdk.StackProps {
   usersTable: dynamodb.Table
@@ -15,6 +16,7 @@ interface ApiStackProps extends cdk.StackProps {
   bookingsTable: dynamodb.Table
   slotsTable: dynamodb.Table
   projectsTable: dynamodb.Table
+  profilePhotosBucket: s3.Bucket
   userPool: cognito.UserPool
   userPoolClient: cognito.UserPoolClient
 }
@@ -37,6 +39,7 @@ export class ApiStack extends cdk.Stack {
       bookingsTable,
       slotsTable,
       projectsTable,
+      profilePhotosBucket,
       userPool,
       userPoolClient,
     } = props
@@ -49,6 +52,7 @@ export class ApiStack extends cdk.Stack {
       BOOKINGS_TABLE: bookingsTable.tableName,
       SLOTS_TABLE: slotsTable.tableName,
       PROJECTS_TABLE: projectsTable.tableName,
+      PROFILE_PHOTOS_BUCKET: profilePhotosBucket.bucketName,
       USER_POOL_ID: userPool.userPoolId,
     }
 
@@ -79,6 +83,7 @@ export class ApiStack extends cdk.Stack {
       bookingsTable.grantReadWriteData(fn)
       slotsTable.grantReadWriteData(fn)
       projectsTable.grantReadWriteData(fn)
+      profilePhotosBucket.grantReadWrite(fn)
 
       return fn
     }
@@ -92,6 +97,7 @@ export class ApiStack extends cdk.Stack {
     const resetUserPasswordFn = createLambda('ResetUserPassword', 'functions/admin/createUser.resetPassword')
     const projectsFn = createLambda('Projects', 'functions/admin/projects.handler')
     const cabsFn = createLambda('Cabs', 'functions/admin/cabs.handler')
+    const profilePhotosFn = createLambda('ProfilePhotos', 'functions/admin/profilePhotos.handler')
 
     userPool.grant(createUserFn, 'cognito-idp:AdminCreateUser')
     userPool.grant(createUserFn, 'cognito-idp:AdminSetUserPassword')
@@ -212,6 +218,13 @@ export class ApiStack extends cdk.Stack {
       path: '/v1/admin/cabs/{cabId}',
       methods: [apigateway.HttpMethod.PATCH],
       integration: new apigatewayIntegrations.HttpLambdaIntegration('CabUpdateIntegration', cabsFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/profile-photos/{userId}',
+      methods: [apigateway.HttpMethod.GET, apigateway.HttpMethod.PUT],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('ProfilePhotosIntegration', profilePhotosFn),
       authorizer,
     })
 

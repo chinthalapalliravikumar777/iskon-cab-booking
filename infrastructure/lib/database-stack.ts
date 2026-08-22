@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
+import * as s3 from 'aws-cdk-lib/aws-s3'
 import { Construct } from 'constructs'
 
 /**
@@ -15,6 +16,7 @@ export class DatabaseStack extends cdk.Stack {
   public readonly bookingsTable: dynamodb.Table
   public readonly slotsTable: dynamodb.Table
   public readonly projectsTable: dynamodb.Table
+  public readonly profilePhotosBucket: s3.Bucket
 
   constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props)
@@ -99,11 +101,20 @@ export class DatabaseStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
 
+    this.profilePhotosBucket = new s3.Bucket(this, 'ProfilePhotosBucket', {
+      bucketName: `iskon-profile-photos-${this.account}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+
     // ── CloudFormation Outputs ───────────────────────────────────────────────
     new cdk.CfnOutput(this, 'UsersTableName', { value: this.usersTable.tableName })
     new cdk.CfnOutput(this, 'CabsTableName', { value: this.cabsTable.tableName })
     new cdk.CfnOutput(this, 'BookingsTableName', { value: this.bookingsTable.tableName })
     new cdk.CfnOutput(this, 'SlotsTableName', { value: this.slotsTable.tableName })
       new cdk.CfnOutput(this, 'ProjectsTableName', { value: this.projectsTable.tableName })
+      new cdk.CfnOutput(this, 'ProfilePhotosBucketName', { value: this.profilePhotosBucket.bucketName })
   }
 }

@@ -3,6 +3,7 @@ import { useNavigate, NavLink } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { logout as cognitoLogout } from '../../utils/cognito'
 import type { UserRole } from '../../types'
+import ProfileAvatar from '../common/ProfileAvatar'
 
 interface NavItem {
   label: string
@@ -61,7 +62,6 @@ export default function AppLayout({ children, title, subtitle }: AppLayoutProps)
   }
 
   const items = user ? navItems[user.role] : []
-  const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U'
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -106,9 +106,7 @@ export default function AppLayout({ children, title, subtitle }: AppLayoutProps)
       {/* User profile at bottom */}
       <div className="px-3 py-4 border-t border-gray-100">
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-50">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-xs font-bold">{initials}</span>
-          </div>
+          <ProfileAvatar userId={user?.userId} name={user?.name} size="sm" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
             <span className={`text-xs ${roleColors[user?.role ?? 'CGM']}`}>{user?.role}</span>
@@ -170,9 +168,7 @@ export default function AppLayout({ children, title, subtitle }: AppLayoutProps)
 
           {/* Top-right: mobile user info */}
           <div className="flex items-center gap-3 md:hidden">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
-              <span className="text-white text-xs font-bold">{initials}</span>
-            </div>
+            <ProfileAvatar userId={user?.userId} name={user?.name} size="sm" />
           </div>
         </header>
 
