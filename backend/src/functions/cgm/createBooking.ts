@@ -4,6 +4,7 @@ import { GetCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dyn
 import { requireRole } from '../../utils/auth'
 import { dynamoDB, TABLE_NAMES } from '../../utils/dynamodb'
 import { errorResponse, successResponse, Responses } from '../../utils/response'
+import { intervalLockTimes, intervalOverlaps, validateInterval } from '../../utils/bookingTime'
 
 /**
  * POST /cgm/bookings
@@ -16,17 +17,23 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const caller = requireRole(event, ['CGM'])
   if (!caller) return Responses.unauthorized()
 
-  let body: { cabId?: string; bookingDate?: string; timeSlot?: string; siteLocation?: string }
+  let body: { cabId?: string; bookingDate?: string; timeSlot?: string; startTime?: string; endTime?: string; siteLocation?: string; projectId?: string; projectName?: string; projectLocation?: string; pickupDetails?: string }
   try {
     body = JSON.parse(event.body || '{}')
   } catch {
     return errorResponse('Invalid request body')
   }
 
-  const { cabId, bookingDate, timeSlot, siteLocation } = body
-  if (!cabId || !bookingDate || !timeSlot || !siteLocation) {
-    return errorResponse('cabId, bookingDate, timeSlot, and siteLocation are all required')
+  const { cabId, bookingDate, siteLocation, projectId, pickupDetails } = body
+  const [legacyStart, legacyEnd] = body.timeSlot?.split('-') || []
+  const startTime = body.startTime || legacyStart
+  const endTime = body.endTime || legacyEnd
+  const timeSlot = startTime && endTime ? `${startTime}-${endTime}` : body.timeSlot
+  if (!cabId || !bookingDate || !startTime || !endTime || !siteLocation) {
+    return errorResponse('cabId, bookingDate, startTime, endTime, and siteLocation are all required')
   }
+  const intervalError = validateInterval({ startTime, endTime })
+  if (intervalError) return errorResponse(intervalError)
 
   try {
     const cabKey = `CAB#${cabId}`
@@ -42,30 +49,46 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return errorResponse('Cab not found', 404)
     }
 
-    if (cab.status !== 'AVAILABLE') {
+    if (!['AVAILABLE', 'ASSIGNED'].includes(cab.status)) {
       return errorResponse('Cab is not currently available for booking', 409)
     }
 
-    const bookingDateSlot = `${bookingDate}#${timeSlot}`
+    let project: Record<string, any> | undefined
+    if (projectId) {
+      const projectResult = await dynamoDB.send(new GetCommand({
+        TableName: TABLE_NAMES.PROJECTS,
+        Key: { PK: `PROJECT#${projectId}`, SK: 'DETAILS' },
+      }))
+      project = projectResult.Item
+      if (!project || project.status !== 'ACTIVE') return errorResponse('Selected project is not active', 409)
+    }
+
+    const bookingDateSlot = `${bookingDate}#${startTime}-${endTime}`
     const existingBookingResult = await dynamoDB.send(
       new QueryCommand({
         TableName: TABLE_NAMES.BOOKINGS,
         IndexName: 'cab-slot-index',
-        KeyConditionExpression: 'cabId = :cabId AND bookingDateSlot = :bookingDateSlot',
+        KeyConditionExpression: 'cabId = :cabId AND begins_with(bookingDateSlot, :bookingDate)',
         ExpressionAttributeValues: {
           ':cabId': cabId,
-          ':bookingDateSlot': bookingDateSlot,
+          ':bookingDate': `${bookingDate}#`,
         },
       })
     )
 
-    if ((existingBookingResult.Items || []).length > 0) {
-      return errorResponse('This cab is already booked for the selected date and time slot', 409)
+    const hasOverlap = (existingBookingResult.Items || []).some(existing => {
+      if (existing.bookingStatus === 'CANCELLED' || existing.bookingStatus === 'COMPLETED') return false
+      if (existing.startTime && existing.endTime) return intervalOverlaps({ startTime, endTime }, { startTime: existing.startTime, endTime: existing.endTime })
+      return !existing.timeSlot || existing.timeSlot === timeSlot
+    })
+    if (hasOverlap) {
+      return errorResponse('Sorry, this cab was just booked for an overlapping time. Please choose another cab or time.', 409)
     }
 
     const bookingId = randomUUID()
     const now = new Date().toISOString()
-    const lockPk = `LOCK#${cabId}#${bookingDate}#${timeSlot}`
+    const lockPk = `CAB#${cabId}#${bookingDate}`
+    const lockTimes = intervalLockTimes({ startTime, endTime })
 
     await dynamoDB.send(
       new TransactWriteCommand({
@@ -99,9 +122,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 driverName: 'Pending Assignment',
                 driverMobile: '',
                 siteLocation,
+                projectId: project?.projectId || projectId,
+                projectName: project?.projectName || body.projectName,
+                projectLocation: project?.location || body.projectLocation,
+                pickupDetails: pickupDetails?.trim() || '',
                 bookingDate,
                 bookingDateSlot,
                 timeSlot,
+                startTime,
+                endTime,
                 bookingStatus: 'BOOKED',
                 createdAt: now,
                 updatedAt: now,
@@ -109,18 +138,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
               ConditionExpression: 'attribute_not_exists(PK)',
             },
           },
-          {
+          ...lockTimes.map(time => ({
             Put: {
               TableName: TABLE_NAMES.SLOTS,
-              Item: {
-                PK: lockPk,
-                SK: 'LOCK',
-                bookingId,
-                createdAt: now,
-              },
+              Item: { PK: lockPk, SK: `LOCK#${time}`, bookingId, createdAt: now },
               ConditionExpression: 'attribute_not_exists(PK)',
             },
-          },
+          })),
         ],
       })
     )
@@ -136,10 +160,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     })
   } catch (error: any) {
     if (error?.name === 'TransactionCanceledException') {
-      return errorResponse('This cab is already booked for the selected date and time slot', 409)
+      return errorResponse('Sorry, this cab was just booked for an overlapping time. Please choose another cab or time.', 409)
     }
     if (error?.name === 'ConditionalCheckFailedException') {
-      return errorResponse('This cab is already booked for the selected date and time slot', 409)
+      return errorResponse('Sorry, this cab was just booked for an overlapping time. Please choose another cab or time.', 409)
     }
     console.error('createBooking failed', error)
     return Responses.serverError()

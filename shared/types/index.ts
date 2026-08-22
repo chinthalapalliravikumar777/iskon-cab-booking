@@ -26,6 +26,7 @@ export interface User {
 
 export type CabStatus =
   | 'AVAILABLE'
+  | 'RESERVED'
   | 'BOOKED'
   | 'ASSIGNED'
   | 'ON_TRIP'
@@ -72,6 +73,7 @@ export type BookingStatus =
   | 'ACCEPTED'
   | 'ON_THE_WAY'
   | 'ARRIVED'
+  | 'ON_SITE'
   | 'COMPLETED'
   | 'CANCELLED'
 
@@ -87,6 +89,12 @@ export interface Booking {
   siteLocation: string
   bookingDate: string   // YYYY-MM-DD
   timeSlot: string      // e.g. "09:00-12:00"
+  startTime?: string
+  endTime?: string
+  projectId?: string
+  projectName?: string
+  projectLocation?: string
+  pickupDetails?: string
   bookingStatus: BookingStatus
   createdAt: string
   updatedAt: string
