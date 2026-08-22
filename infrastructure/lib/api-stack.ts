@@ -135,11 +135,25 @@ export class ApiStack extends cdk.Stack {
       authorizer,
     })
 
+    httpApi.addRoutes({
+      path: '/v1/cgm/bookings',
+      methods: [apigateway.HttpMethod.GET],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('GetMyBookingsIntegration', createLambda('GetMyBookings', 'functions/cgm/getMyBookings.handler')),
+      authorizer,
+    })
+
     // Driver routes
     httpApi.addRoutes({
       path: '/v1/driver/trips/{bookingId}/status',
       methods: [apigateway.HttpMethod.PATCH],
       integration: new apigatewayIntegrations.HttpLambdaIntegration('UpdateTripStatusIntegration', updateTripStatusFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/driver/trips',
+      methods: [apigateway.HttpMethod.GET],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('GetMyTripsIntegration', createLambda('GetMyTrips', 'functions/driver/getMyTrips.handler')),
       authorizer,
     })
 
