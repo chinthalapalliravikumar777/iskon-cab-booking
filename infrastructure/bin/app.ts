@@ -27,6 +27,7 @@ const apiStack = new ApiStack(app, 'IskonApiStack', {
   cabsTable: dbStack.cabsTable,
   bookingsTable: dbStack.bookingsTable,
   slotsTable: dbStack.slotsTable,
+  projectsTable: dbStack.projectsTable,
   userPool: authStack.userPool,
   userPoolClient: authStack.userPoolClient,
 })

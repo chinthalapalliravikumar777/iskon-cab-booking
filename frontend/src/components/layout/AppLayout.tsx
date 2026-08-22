@@ -39,6 +39,7 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Cabs',        path: '/admin/cabs',     icon: <Icon d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-6h15L21 9M3 9h18M3 9l-1 4h20l-1-4" /> },
     { label: 'Drivers',     path: '/admin/drivers',  icon: <Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /> },
     { label: 'CGMs',        path: '/admin/cgms',     icon: <Icon d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" /> },
+    { label: 'Projects',    path: '/admin/projects', icon: <Icon d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" /> },
   ],
 }
 

@@ -23,4 +23,5 @@ export const TABLE_NAMES = {
   CABS: process.env.CABS_TABLE || 'iskon-cabs',
   BOOKINGS: process.env.BOOKINGS_TABLE || 'iskon-bookings',
   SLOTS: process.env.SLOTS_TABLE || 'iskon-slots',
+  PROJECTS: process.env.PROJECTS_TABLE || 'iskon-projects',
 } as const

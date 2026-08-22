@@ -14,6 +14,7 @@ export class DatabaseStack extends cdk.Stack {
   public readonly cabsTable: dynamodb.Table
   public readonly bookingsTable: dynamodb.Table
   public readonly slotsTable: dynamodb.Table
+  public readonly projectsTable: dynamodb.Table
 
   constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props)
@@ -90,10 +91,19 @@ export class DatabaseStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     })
 
+    this.projectsTable = new dynamodb.Table(this, 'ProjectsTable', {
+      tableName: 'iskon-projects',
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+
     // ── CloudFormation Outputs ───────────────────────────────────────────────
     new cdk.CfnOutput(this, 'UsersTableName', { value: this.usersTable.tableName })
     new cdk.CfnOutput(this, 'CabsTableName', { value: this.cabsTable.tableName })
     new cdk.CfnOutput(this, 'BookingsTableName', { value: this.bookingsTable.tableName })
     new cdk.CfnOutput(this, 'SlotsTableName', { value: this.slotsTable.tableName })
+      new cdk.CfnOutput(this, 'ProjectsTableName', { value: this.projectsTable.tableName })
   }
 }

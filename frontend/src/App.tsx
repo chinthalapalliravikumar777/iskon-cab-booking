@@ -3,6 +3,7 @@ import LoginPage from './pages/auth/LoginPage'
 import CGMDashboard from './pages/cgm/CGMDashboard'
 import DriverDashboard from './pages/driver/DriverDashboard'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminProjects from './pages/admin/AdminProjects'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/common/ProtectedRoute'
 
@@ -35,6 +36,15 @@ function App() {
           />
 
           {/* Admin routes - only accessible by ADMIN role */}
+          <Route
+            path="/admin/projects"
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminProjects />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="/admin/*"
             element={

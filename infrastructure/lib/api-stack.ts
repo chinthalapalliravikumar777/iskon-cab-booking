@@ -14,6 +14,7 @@ interface ApiStackProps extends cdk.StackProps {
   cabsTable: dynamodb.Table
   bookingsTable: dynamodb.Table
   slotsTable: dynamodb.Table
+  projectsTable: dynamodb.Table
   userPool: cognito.UserPool
   userPoolClient: cognito.UserPoolClient
 }
@@ -35,6 +36,7 @@ export class ApiStack extends cdk.Stack {
       cabsTable,
       bookingsTable,
       slotsTable,
+      projectsTable,
       userPool,
       userPoolClient,
     } = props
@@ -46,6 +48,7 @@ export class ApiStack extends cdk.Stack {
       CABS_TABLE: cabsTable.tableName,
       BOOKINGS_TABLE: bookingsTable.tableName,
       SLOTS_TABLE: slotsTable.tableName,
+      PROJECTS_TABLE: projectsTable.tableName,
       USER_POOL_ID: userPool.userPoolId,
     }
 
@@ -75,6 +78,7 @@ export class ApiStack extends cdk.Stack {
       cabsTable.grantReadWriteData(fn)
       bookingsTable.grantReadWriteData(fn)
       slotsTable.grantReadWriteData(fn)
+      projectsTable.grantReadWriteData(fn)
 
       return fn
     }
@@ -86,6 +90,7 @@ export class ApiStack extends cdk.Stack {
     const releaseCabFn       = createLambda('ReleaseCab',       'functions/admin/releaseCab.handler')
     const createUserFn       = createLambda('CreateUser',       'functions/admin/createUser.handler')
     const resetUserPasswordFn = createLambda('ResetUserPassword', 'functions/admin/createUser.resetPassword')
+    const projectsFn = createLambda('Projects', 'functions/admin/projects.handler')
 
     userPool.grant(createUserFn, 'cognito-idp:AdminCreateUser')
     userPool.grant(createUserFn, 'cognito-idp:AdminSetUserPassword')
@@ -164,6 +169,20 @@ export class ApiStack extends cdk.Stack {
       path: '/v1/admin/users/{username}/password',
       methods: [apigateway.HttpMethod.PATCH],
       integration: new apigatewayIntegrations.HttpLambdaIntegration('ResetUserPasswordIntegration', resetUserPasswordFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/projects',
+      methods: [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('ProjectsIntegration', projectsFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/projects/{projectId}',
+      methods: [apigateway.HttpMethod.PATCH],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('ProjectUpdateIntegration', projectsFn),
       authorizer,
     })
 

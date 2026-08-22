@@ -89,3 +89,17 @@ export interface SlotRecord {
   endTime: string
   isActive: boolean
 }
+
+export type ProjectStatus = 'ACTIVE' | 'INACTIVE'
+
+export interface ProjectRecord {
+  PK: string
+  SK: string
+  projectId: string
+  projectName: string
+  location: string
+  status: ProjectStatus
+  description?: string
+  createdAt: string
+  updatedAt: string
+}

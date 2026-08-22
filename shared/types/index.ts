@@ -51,6 +51,20 @@ export interface TimeSlot {
   isActive: boolean
 }
 
+// ─── Project ─────────────────────────────────────────────────
+
+export type ProjectStatus = 'ACTIVE' | 'INACTIVE'
+
+export interface Project {
+  projectId: string
+  projectName: string
+  location: string
+  status: ProjectStatus
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ─── Booking ─────────────────────────────────────────────────
 
 export type BookingStatus =
