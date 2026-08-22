@@ -7,6 +7,7 @@ export interface CallerIdentity {
   email: string
   role: UserRole
   name: string
+  mobile: string
 }
 
 /**
@@ -29,10 +30,11 @@ export function getCallerIdentity(event: APIGatewayProxyEvent): CallerIdentity |
     const userId = claims['sub'] as string
     const email = claims['email'] as string
     const name = (claims['name'] || email) as string
+    const mobile = (claims['custom:mobile'] || '') as string
 
     if (!userId || !role) return null
 
-    return { userId, email, role, name }
+    return { userId, email, role, name, mobile }
   } catch {
     return null
   }

@@ -1,24 +1,16 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
+import { UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { requireRole } from '../../utils/auth'
+import { dynamoDB, TABLE_NAMES } from '../../utils/dynamodb'
 import { errorResponse, successResponse, Responses } from '../../utils/response'
 
-/**
- * PATCH /admin/cabs/{cabId}/status
- *
- * Allows an admin to manually release a cab back to AVAILABLE.
- * Used when a driver forgets to mark a trip as COMPLETED.
- * Only accessible by ADMIN role.
- */
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  // 1. Verify the caller is an ADMIN
   const caller = requireRole(event, ['ADMIN'])
   if (!caller) return Responses.unauthorized()
 
-  // 2. Get cabId from path
   const cabId = event.pathParameters?.cabId
   if (!cabId) return errorResponse('cabId is required')
 
-  // 3. Parse optional body for reason
   let body: { status?: string; reason?: string }
   try {
     body = JSON.parse(event.body || '{}')
@@ -32,6 +24,25 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return errorResponse(`Status must be one of: ${validStatuses.join(', ')}`)
   }
 
-  // TODO: Phase 5 - update DynamoDB cab status
-  return successResponse({ message: 'Coming in Phase 5', cabId, newStatus })
+  try {
+    await dynamoDB.send(
+      new UpdateCommand({
+        TableName: TABLE_NAMES.CABS,
+        Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt REMOVE assignedDriverId, assignedDriverName',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':status': newStatus,
+          ':updatedAt': new Date().toISOString(),
+        },
+      })
+    )
+
+    return successResponse({ cabId, status: newStatus })
+  } catch (error) {
+    console.error('releaseCab failed', error)
+    return Responses.serverError()
+  }
 }

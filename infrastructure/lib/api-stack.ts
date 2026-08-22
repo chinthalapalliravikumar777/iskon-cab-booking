@@ -84,6 +84,13 @@ export class ApiStack extends cdk.Stack {
     const createBookingFn    = createLambda('CreateBooking',    'functions/cgm/createBooking.handler')
     const updateTripStatusFn = createLambda('UpdateTripStatus', 'functions/driver/updateTripStatus.handler')
     const releaseCabFn       = createLambda('ReleaseCab',       'functions/admin/releaseCab.handler')
+    const createUserFn       = createLambda('CreateUser',       'functions/admin/createUser.handler')
+    const resetUserPasswordFn = createLambda('ResetUserPassword', 'functions/admin/createUser.resetPassword')
+
+    userPool.grant(createUserFn, 'cognito-idp:AdminCreateUser')
+    userPool.grant(createUserFn, 'cognito-idp:AdminSetUserPassword')
+    userPool.grant(resetUserPasswordFn, 'cognito-idp:AdminSetUserPassword')
+    userPool.grant(createUserFn, 'cognito-idp:ListUsers')
 
     // ── Cognito JWT Authorizer ───────────────────────────────────────────────
     // API Gateway validates the JWT token automatically before calling Lambda
@@ -136,6 +143,27 @@ export class ApiStack extends cdk.Stack {
       path: '/v1/admin/cabs/{cabId}/status',
       methods: [apigateway.HttpMethod.PATCH],
       integration: new apigatewayIntegrations.HttpLambdaIntegration('ReleaseCabIntegration', releaseCabFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/admin/users',
+      methods: [apigateway.HttpMethod.POST],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('CreateUserIntegration', createUserFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/admin/users',
+      methods: [apigateway.HttpMethod.GET],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('ListUsersIntegration', createUserFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/admin/users/{username}/password',
+      methods: [apigateway.HttpMethod.PATCH],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('ResetUserPasswordIntegration', resetUserPasswordFn),
       authorizer,
     })
 
