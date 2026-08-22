@@ -91,6 +91,7 @@ export class ApiStack extends cdk.Stack {
     const createUserFn       = createLambda('CreateUser',       'functions/admin/createUser.handler')
     const resetUserPasswordFn = createLambda('ResetUserPassword', 'functions/admin/createUser.resetPassword')
     const projectsFn = createLambda('Projects', 'functions/admin/projects.handler')
+    const cabsFn = createLambda('Cabs', 'functions/admin/cabs.handler')
 
     userPool.grant(createUserFn, 'cognito-idp:AdminCreateUser')
     userPool.grant(createUserFn, 'cognito-idp:AdminSetUserPassword')
@@ -197,6 +198,20 @@ export class ApiStack extends cdk.Stack {
       path: '/v1/projects/{projectId}',
       methods: [apigateway.HttpMethod.PATCH],
       integration: new apigatewayIntegrations.HttpLambdaIntegration('ProjectUpdateIntegration', projectsFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/admin/cabs',
+      methods: [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('CabsIntegration', cabsFn),
+      authorizer,
+    })
+
+    httpApi.addRoutes({
+      path: '/v1/admin/cabs/{cabId}',
+      methods: [apigateway.HttpMethod.PATCH],
+      integration: new apigatewayIntegrations.HttpLambdaIntegration('CabUpdateIntegration', cabsFn),
       authorizer,
     })
 
