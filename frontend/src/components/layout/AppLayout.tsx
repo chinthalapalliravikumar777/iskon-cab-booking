@@ -69,10 +69,7 @@ export default function AppLayout({ children, title, subtitle }: AppLayoutProps)
       <div className="px-6 py-5 border-b border-gray-100">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center shadow-md">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-6h15L21 9M3 9h18M3 9l-1 4h20l-1-4" />
-            </svg>
+            <img src="/favicon.svg" alt="ISKON logo" className="w-7 h-7 object-contain" />
           </div>
           <div>
             <p className="text-sm font-bold text-gray-900 leading-tight">Iskon Cabs</p>
