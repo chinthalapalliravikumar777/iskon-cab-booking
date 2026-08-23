@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import apiClient from '../../api/client'
 import { useEffect, useState } from 'react'
 import ProfileAvatar from '../../components/common/ProfileAvatar'
+import { Link } from 'react-router-dom'
 
 type ManagedRole = 'CGM' | 'DRIVER'
 type AccountFilter = 'ALL' | ManagedRole
@@ -23,10 +24,10 @@ const StatCard = ({
   </div>
 )
 
-const QuickAction = ({ icon, label, description, color }: {
-  icon: string; label: string; description: string; color: string
+const QuickAction = ({ icon, label, description, color, path }: {
+  icon: string; label: string; description: string; color: string; path: string
 }) => (
-  <div className="card-hover flex items-center gap-4">
+  <Link to={path} className="card-hover flex items-center gap-4">
     <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center text-2xl flex-shrink-0`}>{icon}</div>
     <div>
       <p className="text-sm font-semibold text-gray-900">{label}</p>
@@ -35,7 +36,7 @@ const QuickAction = ({ icon, label, description, color }: {
     <svg className="w-4 h-4 text-gray-300 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
     </svg>
-  </div>
+  </Link>
 )
 
 export default function AdminDashboard() {
@@ -116,7 +117,7 @@ export default function AdminDashboard() {
     if (file.size > 5 * 1024 * 1024) { setError('Profile photos must be 5 MB or smaller.'); return }
     setError('')
     try {
-      const response = await apiClient.put(`/v1/profile-photos/${encodeURIComponent(account.userId)}`, undefined, { headers: { 'Content-Type': file.type, 'Content-Length': file.size } })
+      const response = await apiClient.put(`/v1/profile-photos/${encodeURIComponent(account.userId)}`, undefined, { headers: { 'Content-Type': file.type } })
       await fetch(response.data.data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
       setMessage(`Profile photo uploaded for ${account.name}.`)
     } catch { setError('Could not upload the profile photo.') }
@@ -151,10 +152,10 @@ export default function AdminDashboard() {
       <div className="mb-6">
         <p className="section-title mb-3">Quick Actions</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <QuickAction icon="🚗" label="Manage Cabs"    description="Add, edit or update cab status" color="bg-blue-50" />
-          <QuickAction icon="🧑‍✈️" label="Manage Drivers" description="Add or edit driver profiles"    color="bg-emerald-50" />
-          <QuickAction icon="👥" label="Manage CGMs"    description="Add or deactivate CGM accounts"  color="bg-purple-50" />
-          <QuickAction icon="📋" label="All Bookings"   description="View, cancel or reassign trips"   color="bg-orange-50" />
+          <QuickAction path="/admin/cabs" icon="🚗" label="Manage Cabs"    description="Add, edit or update cab status" color="bg-blue-50" />
+          <QuickAction path="/admin/drivers" icon="🧑‍✈️" label="Manage Drivers" description="Add or edit driver profiles"    color="bg-emerald-50" />
+          <QuickAction path="/admin/cgms" icon="👥" label="Manage CGMs"    description="Add or deactivate CGM accounts"  color="bg-purple-50" />
+          <QuickAction path="/admin/bookings" icon="📋" label="All Bookings"   description="View, cancel or reassign trips"   color="bg-orange-50" />
         </div>
       </div>
 
