@@ -7,12 +7,7 @@ import type { CognitoUser } from 'amazon-cognito-identity-js'
 type Screen = 'login' | 'new-password'
 
 // ── Icons ────────────────────────────────────────────────────────────────────
-const CarIcon = () => (
-  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-      d="M9 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM3 9l1.5-6h15L21 9M3 9h18M3 9l-1 4h20l-1-4" />
-  </svg>
-)
+const CarIcon = () => <img src="/favicon.svg" alt="ISKON logo" className="w-8 h-8 object-contain" />
 const LockIcon = () => (
   <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
