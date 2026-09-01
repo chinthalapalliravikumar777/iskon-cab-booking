@@ -8,6 +8,9 @@ export interface AuthUser {
   email: string
   mobile: string
   role: UserRole
+  // Driver-specific fields
+  assignedCabId?: string
+  assignedCabNumber?: string
 }
 
 // ─── Cab Types ─────────────────────────────────────────────────────────────
@@ -33,12 +36,18 @@ export interface Cab {
 
 export type BookingStatus =
   | 'BOOKED'
+  | 'BOOKING_PENDING'
+  | 'CONFIRMED'
   | 'ACCEPTED'
   | 'ON_THE_WAY'
   | 'ARRIVED' // legacy compatibility
   | 'ON_SITE'
   | 'COMPLETED'
   | 'CANCELLED'
+  | 'REJECTED'
+  | 'EXPIRED'
+
+export type DriverResponseStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED'
 
 export interface Booking {
   bookingId: string
@@ -52,7 +61,14 @@ export interface Booking {
   siteLocation: string
   bookingDate: string   // YYYY-MM-DD
   timeSlot: string      // e.g. "09:00-12:00"
+  startTime?: string    // e.g. "09:00"
+  endTime?: string      // e.g. "12:00"
   bookingStatus: BookingStatus
+  driverResponseStatus?: DriverResponseStatus
+  driverResponseDeadline?: string  // ISO timestamp
+  driverResponseAt?: string        // ISO timestamp
+  statusUpdatedBy?: 'CGM' | 'DRIVER' | 'ADMIN'
+  statusUpdatedAt?: string         // ISO timestamp
   createdAt: string
   updatedAt: string
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
-import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand, ScanCommand, UpdateCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import { requireRole } from '../../utils/auth'
 import { dynamoDB, TABLE_NAMES } from '../../utils/dynamodb'
 import { errorResponse, Responses, successResponse } from '../../utils/response'
@@ -48,17 +48,96 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   try {
     const currentResult = await dynamoDB.send(new GetCommand({ TableName: TABLE_NAMES.CABS, Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' } }))
-    if (!currentResult.Item) return errorResponse('Cab not found', 404)
+    const currentCab = currentResult.Item
+    if (!currentCab) return errorResponse('Cab not found', 404)
+
+    // Check if driver is available (not already assigned to another active cab)
     await ensureDriverAvailable(body.assignedDriverId, cabId)
+
+    const now = new Date().toISOString()
+    const oldDriverId = currentCab.assignedDriverId
+    const newDriverId = body.assignedDriverId
+    const newCabNumber = body.cabNumber || currentCab.cabNumber
+
+    // Build update expression for cab
     const names: Record<string, string> = {}
-    const values: Record<string, unknown> = { ':updatedAt': new Date().toISOString() }
+    const values: Record<string, unknown> = { ':updatedAt': now }
     const updates = ['updatedAt = :updatedAt']
     const fields = ['cabNumber', 'vehicleModel', 'registrationNumber', 'vehicleDetails', 'status', 'assignedDriverId', 'assignedDriverName'] as const
     for (const field of fields) {
       if (body[field] !== undefined) { updates.push(`#${field} = :${field}`); names[`#${field}`] = field; values[`:${field}`] = body[field] || null }
     }
-    const result = await dynamoDB.send(new UpdateCommand({ TableName: TABLE_NAMES.CABS, Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' }, UpdateExpression: `SET ${updates.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values, ReturnValues: 'ALL_NEW' }))
-    return successResponse(result.Attributes)
+
+    // If assigning a driver, use transaction to update both cab and driver records
+    if (newDriverId && newDriverId !== oldDriverId) {
+      const transactItems: any[] = [
+        {
+          Update: {
+            TableName: TABLE_NAMES.CABS,
+            Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' },
+            UpdateExpression: `SET ${updates.join(', ')}`,
+            ExpressionAttributeNames: names,
+            ExpressionAttributeValues: values,
+          },
+        },
+        {
+          Update: {
+            TableName: TABLE_NAMES.USERS,
+            Key: { PK: `USER#${newDriverId}`, SK: 'PROFILE' },
+            UpdateExpression: 'SET assignedCabId = :cabId, assignedCabNumber = :cabNumber, updatedAt = :updatedAt',
+            ExpressionAttributeValues: {
+              ':cabId': cabId,
+              ':cabNumber': newCabNumber,
+              ':updatedAt': now,
+            },
+          },
+        },
+      ]
+
+      // If there was an old driver assignment, clear it
+      if (oldDriverId && oldDriverId !== 'UNASSIGNED') {
+        transactItems.push({
+          Update: {
+            TableName: TABLE_NAMES.USERS,
+            Key: { PK: `USER#${oldDriverId}`, SK: 'PROFILE' },
+            UpdateExpression: 'REMOVE assignedCabId, assignedCabNumber SET updatedAt = :updatedAt',
+            ExpressionAttributeValues: { ':updatedAt': now },
+          },
+        })
+      }
+
+      await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
+    } else if (!newDriverId && oldDriverId && oldDriverId !== 'UNASSIGNED') {
+      // Unassigning — clear from both cab and driver
+      const transactItems: any[] = [
+        {
+          Update: {
+            TableName: TABLE_NAMES.CABS,
+            Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' },
+            UpdateExpression: `SET ${updates.join(', ')}`,
+            ExpressionAttributeNames: names,
+            ExpressionAttributeValues: values,
+          },
+        },
+        {
+          Update: {
+            TableName: TABLE_NAMES.USERS,
+            Key: { PK: `USER#${oldDriverId}`, SK: 'PROFILE' },
+            UpdateExpression: 'REMOVE assignedCabId, assignedCabNumber SET updatedAt = :updatedAt',
+            ExpressionAttributeValues: { ':updatedAt': now },
+          },
+        },
+      ]
+      await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
+    } else {
+      // No driver assignment change, just update cab
+      const result = await dynamoDB.send(new UpdateCommand({ TableName: TABLE_NAMES.CABS, Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' }, UpdateExpression: `SET ${updates.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values, ReturnValues: 'ALL_NEW' }))
+      return successResponse(result.Attributes)
+    }
+
+    // Return updated cab
+    const updatedResult = await dynamoDB.send(new GetCommand({ TableName: TABLE_NAMES.CABS, Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' } }))
+    return successResponse(updatedResult.Item)
   } catch (error: any) {
     if (error?.code === 'DRIVER_ASSIGNED') return errorResponse(error.message, 409)
     console.error('updateCab failed', error)

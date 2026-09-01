@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
-import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand, ScanCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb'
 import { requireRole } from '../../utils/auth'
 import { dynamoDB, TABLE_NAMES } from '../../utils/dynamodb'
 import { errorResponse, successResponse, Responses } from '../../utils/response'
@@ -30,6 +30,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const status = body.status || 'ACTIVE'
   if (method === 'POST' && (!projectName || !location)) return errorResponse('Project name and location are required')
   if (method === 'PATCH' && (!projectId || (!projectName && !location && !body.status && body.description === undefined))) return errorResponse('Project changes are required')
+  if (method === 'DELETE' && !projectId) return errorResponse('Project ID is required')
   if (!['ACTIVE', 'INACTIVE'].includes(status)) return errorResponse('Status must be ACTIVE or INACTIVE')
 
   try {
@@ -39,6 +40,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const created = { PK: `PROJECT#${newProjectId}`, SK: 'DETAILS', projectId: newProjectId, projectName, location, status, description: body.description?.trim(), createdAt: now, updatedAt: now }
       await dynamoDB.send(new PutCommand({ TableName: TABLE_NAMES.PROJECTS, Item: created, ConditionExpression: 'attribute_not_exists(PK)' }))
       return successResponse(created, 201)
+    }
+
+    if (method === 'DELETE') {
+      const existing = await dynamoDB.send(new GetCommand({ TableName: TABLE_NAMES.PROJECTS, Key: { PK: `PROJECT#${projectId}`, SK: 'DETAILS' } }))
+      if (!existing.Item) return errorResponse('Project not found', 404)
+
+      // Delete the project — it remains in historical booking records
+      await dynamoDB.send(new DeleteCommand({ TableName: TABLE_NAMES.PROJECTS, Key: { PK: `PROJECT#${projectId}`, SK: 'DETAILS' } }))
+      return successResponse({ projectId, deleted: true })
     }
 
     const existing = await dynamoDB.send(new GetCommand({ TableName: TABLE_NAMES.PROJECTS, Key: { PK: `PROJECT#${projectId}`, SK: 'DETAILS' } }))

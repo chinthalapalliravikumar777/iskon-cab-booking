@@ -14,6 +14,9 @@ export interface UserRecord {
   mobile: string
   email: string
   status: UserStatus
+  // Driver-specific fields (for DRIVER role only)
+  assignedCabId?: string
+  assignedCabNumber?: string
   createdAt: string
   updatedAt: string
 }
@@ -73,6 +76,13 @@ export interface BookingRecord {
   projectLocation?: string
   pickupDetails?: string
   bookingStatus: BookingStatus
+  // Driver response workflow
+  driverResponseStatus?: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED'
+  driverResponseDeadline?: string   // ISO timestamp: when driver must respond by
+  driverResponseAt?: string         // ISO timestamp: when driver actually responded
+  // Audit fields
+  statusUpdatedBy?: 'CGM' | 'DRIVER' | 'ADMIN'
+  statusUpdatedAt?: string
   createdAt: string
   updatedAt: string
 }

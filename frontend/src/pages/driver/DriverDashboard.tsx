@@ -70,15 +70,21 @@ export default function DriverDashboard() {
       .catch(() => setError('Could not load your trips.')),
   [])
 
-  const loadCab = useCallback(() =>
-    apiClient.get('/v1/admin/cabs')
+  const loadCab = useCallback(() => {
+    // Get assigned cab from authenticated user's record
+    if (!user?.assignedCabId) {
+      setCab(null)
+      return Promise.resolve()
+    }
+    
+    return apiClient.get('/v1/admin/cabs')
       .then(r => {
         const cabs: CabDetails[] = r.data.data || []
-        const mine = cabs.find((c: any) => c.assignedDriverId === user?.userId)
+        const mine = cabs.find((c: any) => c.cabId === user.assignedCabId)
         setCab(mine || null)
       })
-      .catch(() => { /* no cab — non-critical */ }),
-  [user?.userId])
+      .catch(() => { /* no cab — non-critical */ })
+  }, [user?.assignedCabId])
 
   useEffect(() => {
     Promise.all([loadTrips(), loadCab()])

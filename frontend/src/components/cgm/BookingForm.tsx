@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getAvailableCabs, createBooking } from '../../api/bookings'
 import apiClient from '../../api/client'
+import CustomSelect from '../common/CustomSelect'
 
 interface Project { projectId: string; projectName: string; location: string; status: string }
 interface Cab     { cabId: string; cabNumber: string; vehicleModel?: string; status: string; assignedDriverName?: string }
@@ -178,12 +179,15 @@ export default function BookingForm({ onBooked }: Props) {
       {projects.length > 0 && (
         <div>
           <label className="input-label text-white/80">Project</label>
-          <select className="input-field" value={projectId} onChange={e => setProjectId(e.target.value)}>
-            <option value="">— Select project (optional) —</option>
-            {projects.map(p => (
-              <option key={p.projectId} value={p.projectId}>{p.projectName} — {p.location}</option>
-            ))}
-          </select>
+          <CustomSelect
+            value={projectId}
+            onChange={setProjectId}
+            placeholder="— Select project (optional) —"
+            options={[
+              { value: '', label: '— Select project (optional) —' },
+              ...projects.map(p => ({ value: p.projectId, label: `${p.projectName} — ${p.location}` }))
+            ]}
+          />
         </div>
       )}
 

@@ -45,10 +45,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         await dynamoDB.send(new UpdateCommand({
           TableName: TABLE_NAMES.BOOKINGS,
           Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET bookingStatus = :confirmed, #legacyStatus = :confirmed, confirmedAt = :now, updatedAt = :now',
+          UpdateExpression: 'SET bookingStatus = :confirmed, #legacyStatus = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, statusUpdatedBy = :driver, statusUpdatedAt = :now, confirmedAt = :now, updatedAt = :now',
           ConditionExpression: '(#legacyStatus = :pending OR bookingStatus = :pending) AND confirmationDeadline > :now',
           ExpressionAttributeNames: { '#legacyStatus': 'status' },
-          ExpressionAttributeValues: { ':confirmed': 'CONFIRMED', ':pending': 'BOOKING_PENDING', ':now': now },
+          ExpressionAttributeValues: { ':confirmed': 'CONFIRMED', ':pending': 'BOOKING_PENDING', ':accepted': 'ACCEPTED', ':driver': 'DRIVER', ':now': now },
         }))
 
         try {
@@ -69,7 +69,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           console.warn('Failed to create CGM confirmation notification', err)
         }
 
-        return successResponse({ bookingId, status: 'CONFIRMED', confirmedAt: now })
+        return successResponse({ bookingId, status: 'CONFIRMED', driverResponseStatus: 'ACCEPTED', confirmedAt: now })
       } catch (err: any) {
         console.error('Accept failed', err)
         return errorResponse('Could not confirm booking', 409)
@@ -92,10 +92,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Update: {
           TableName: TABLE_NAMES.BOOKINGS,
           Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET bookingStatus = :rejected, #legacyStatus = :rejected, rejectedAt = :now, updatedAt = :now',
+          UpdateExpression: 'SET bookingStatus = :rejected, #legacyStatus = :rejected, driverResponseStatus = :rejected_response, driverResponseAt = :now, statusUpdatedBy = :driver, statusUpdatedAt = :now, rejectedAt = :now, updatedAt = :now',
           ConditionExpression: '(#legacyStatus = :pending OR bookingStatus = :pending) AND confirmationDeadline > :now',
           ExpressionAttributeNames: { '#legacyStatus': 'status' },
-          ExpressionAttributeValues: { ':rejected': 'REJECTED', ':pending': 'BOOKING_PENDING', ':now': now },
+          ExpressionAttributeValues: { ':rejected': 'REJECTED', ':rejected_response': 'REJECTED', ':pending': 'BOOKING_PENDING', ':driver': 'DRIVER', ':now': now },
         },
       })
 

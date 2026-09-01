@@ -10,6 +10,8 @@ interface Driver {
   role: string
   status: string
   enabled: boolean
+  assignedCabId?: string
+  assignedCabNumber?: string
 }
 
 interface Cab {
@@ -123,14 +125,13 @@ export default function AdminDrivers() {
     }
   }
 
-  const assignedCabFor = (driverId: string) => cabs.find(c => c.assignedDriverId === driverId)
-  const availableCabs = cabs.filter(c => c.status !== 'INACTIVE' && c.status !== 'MAINTENANCE')
-
   const filtered = drivers.filter(d =>
     d.name.toLowerCase().includes(search.toLowerCase()) ||
     d.email.toLowerCase().includes(search.toLowerCase()) ||
     d.mobile?.includes(search)
   )
+
+  const availableCabs = cabs.filter(c => c.status !== 'INACTIVE' && c.status !== 'MAINTENANCE')
 
   return (
     <AppLayout title="Manage Drivers" subtitle="View, assign cabs and manage driver accounts">
@@ -177,16 +178,14 @@ export default function AdminDrivers() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(driver => {
-                const cab = assignedCabFor(driver.userId)
-                return (
+              {filtered.map(driver => (
                   <tr key={driver.userId} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="py-3 pr-4 font-medium text-gray-900">{driver.name}</td>
                     <td className="py-3 pr-4 text-gray-600">{driver.email}</td>
                     <td className="py-3 pr-4 text-gray-600">{driver.mobile || '—'}</td>
                     <td className="py-3 pr-4">
-                      {cab ? (
-                        <span className="font-medium text-blue-700">{cab.cabNumber} — {cab.vehicleModel}</span>
+                      {driver.assignedCabId ? (
+                        <span className="font-medium text-blue-700">{driver.assignedCabNumber}</span>
                       ) : (
                         <span className="text-gray-400">Not assigned</span>
                       )}
@@ -214,7 +213,7 @@ export default function AdminDrivers() {
                     </td>
                   </tr>
                 )
-              })}
+              )}
             </tbody>
           </table>
         )}

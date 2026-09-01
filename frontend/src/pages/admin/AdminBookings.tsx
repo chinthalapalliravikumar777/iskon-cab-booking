@@ -16,6 +16,8 @@ interface Booking {
   siteLocation: string
   bookingStatus: string
   status?: string
+  driverResponseStatus?: string
+  driverResponseDeadline?: string
   createdAt: string
   pickupDetails?: string
   cancelReason?: string
@@ -48,7 +50,7 @@ export default function AdminBookings() {
   const [search, setSearch] = useState('')
 
   // Action modal
-  const [actionModal, setActionModal] = useState<{ booking: Booking; action: 'CANCEL' | 'COMPLETE' } | null>(null)
+  const [actionModal, setActionModal] = useState<{ booking: Booking; action: 'CANCEL' | 'COMPLETE' | 'ACCEPT' | 'REJECT' } | null>(null)
   const [actionReason, setActionReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -93,7 +95,12 @@ export default function AdminBookings() {
         action: actionModal.action,
         reason: actionReason,
       })
-      const newStatus = actionModal.action === 'CANCEL' ? 'CANCELLED' : 'COMPLETED'
+      let newStatus: string
+      if (actionModal.action === 'CANCEL') newStatus = 'CANCELLED'
+      else if (actionModal.action === 'COMPLETE') newStatus = 'COMPLETED'
+      else if (actionModal.action === 'ACCEPT') newStatus = 'CONFIRMED'
+      else newStatus = 'REJECTED'
+      
       setBookings(prev =>
         prev.map(b =>
           b.bookingId === actionModal.booking.bookingId
@@ -101,7 +108,7 @@ export default function AdminBookings() {
             : b
         )
       )
-      setMessage(`Booking ${actionModal.action === 'CANCEL' ? 'cancelled' : 'marked complete'} successfully.`)
+      setMessage(`Booking ${actionModal.action.toLowerCase()} successfully.`)
       setActionModal(null)
       setActionReason('')
     } catch (e: any) {
@@ -198,19 +205,41 @@ export default function AdminBookings() {
                       </div>
                     </div>
                     {isActive && (
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button
-                          className="text-xs font-medium text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200"
-                          onClick={() => { setActionModal({ booking: b, action: 'CANCEL' }); setActionReason('') }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="text-xs font-medium text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200"
-                          onClick={() => { setActionModal({ booking: b, action: 'COMPLETE' }); setActionReason('') }}
-                        >
-                          Force Complete
-                        </button>
+                      <div className="flex gap-2 flex-wrap flex-shrink-0">
+                        {/* Show ACCEPT/REJECT for PENDING driver response */}
+                        {(b.driverResponseStatus === 'PENDING' || b.bookingStatus === 'BOOKING_PENDING') && (
+                          <>
+                            <button
+                              className="text-xs font-medium text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200"
+                              onClick={() => { setActionModal({ booking: b, action: 'ACCEPT' }); setActionReason('') }}
+                            >
+                              Accept
+                            </button>
+                            <button
+                              className="text-xs font-medium text-orange-600 hover:bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200"
+                              onClick={() => { setActionModal({ booking: b, action: 'REJECT' }); setActionReason('') }}
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        {/* Standard CANCEL/COMPLETE for active bookings */}
+                        {(!b.driverResponseStatus || b.driverResponseStatus !== 'PENDING') && (
+                          <>
+                            <button
+                              className="text-xs font-medium text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200"
+                              onClick={() => { setActionModal({ booking: b, action: 'CANCEL' }); setActionReason('') }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="text-xs font-medium text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200"
+                              onClick={() => { setActionModal({ booking: b, action: 'COMPLETE' }); setActionReason('') }}
+                            >
+                              Complete
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -226,17 +255,27 @@ export default function AdminBookings() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold text-gray-900 mb-1">
-              {actionModal.action === 'CANCEL' ? 'Cancel Booking' : 'Force Complete Booking'}
+              {actionModal.action === 'CANCEL' && 'Cancel Booking'}
+              {actionModal.action === 'COMPLETE' && 'Force Complete Booking'}
+              {actionModal.action === 'ACCEPT' && 'Accept Booking'}
+              {actionModal.action === 'REJECT' && 'Reject Booking'}
             </h2>
             <p className="text-sm text-gray-500 mb-4">
               {actionModal.booking.projectName || actionModal.booking.siteLocation} —{' '}
               {actionModal.booking.bookingDate} · {actionModal.booking.startTime}–{actionModal.booking.endTime}
             </p>
 
-            <label className="input-label">Reason (optional)</label>
+            <label className="input-label">
+              {actionModal.action === 'ACCEPT' || actionModal.action === 'REJECT' ? 'Note (optional)' : 'Reason (optional)'}
+            </label>
             <input
               className="input-field mb-4"
-              placeholder={actionModal.action === 'CANCEL' ? 'Reason for cancellation' : 'Reason for force completion'}
+              placeholder={
+                actionModal.action === 'CANCEL' ? 'Reason for cancellation' :
+                actionModal.action === 'COMPLETE' ? 'Reason for force completion' :
+                actionModal.action === 'ACCEPT' ? 'Note about this decision' :
+                'Reason for rejection'
+              }
               value={actionReason}
               onChange={e => setActionReason(e.target.value)}
             />
@@ -245,11 +284,20 @@ export default function AdminBookings() {
 
             <div className="flex gap-3">
               <button
-                className={`flex-1 ${actionModal.action === 'CANCEL' ? 'btn-danger' : 'btn-primary'}`}
+                className={`flex-1 ${
+                  actionModal.action === 'CANCEL' ? 'btn-danger' :
+                  actionModal.action === 'REJECT' ? 'btn-danger' :
+                  'btn-primary'
+                }`}
                 onClick={() => void executeAction()}
                 disabled={actionLoading}
               >
-                {actionLoading ? 'Processing...' : actionModal.action === 'CANCEL' ? 'Confirm Cancel' : 'Force Complete'}
+                {actionLoading ? 'Processing...' : 
+                  actionModal.action === 'CANCEL' ? 'Confirm Cancel' :
+                  actionModal.action === 'COMPLETE' ? 'Force Complete' :
+                  actionModal.action === 'ACCEPT' ? 'Confirm Accept' :
+                  'Confirm Reject'
+                }
               </button>
               <button className="btn-secondary flex-1" onClick={() => setActionModal(null)}>
                 Back

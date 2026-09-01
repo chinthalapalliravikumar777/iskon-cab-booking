@@ -72,11 +72,11 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
   }
 
-  // ── PATCH — cancel or force-complete ─────────────────────────────────────
+  // ── PATCH — admin actions on bookings ────────────────────────────────────
   if (method === 'PATCH') {
     if (!bookingId) return errorResponse('bookingId is required')
 
-    let body: { action?: 'CANCEL' | 'COMPLETE'; reason?: string }
+    let body: { action?: 'CANCEL' | 'COMPLETE' | 'ACCEPT' | 'REJECT'; reason?: string }
     try {
       body = JSON.parse(event.body || '{}')
     } catch {
@@ -84,8 +84,8 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const { action, reason } = body
-    if (action !== 'CANCEL' && action !== 'COMPLETE') {
-      return errorResponse('Action must be CANCEL or COMPLETE')
+    if (!['CANCEL', 'COMPLETE', 'ACCEPT', 'REJECT'].includes(action || '')) {
+      return errorResponse('Action must be CANCEL, COMPLETE, ACCEPT, or REJECT')
     }
 
     try {
@@ -98,12 +98,103 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       if (!booking) return errorResponse('Booking not found', 404)
 
       const currentStatus = booking.bookingStatus || booking.status || ''
+      const now = new Date().toISOString()
+
+      // ACCEPT action — admin accepts an expired/pending booking (moves it to CONFIRMED)
+      if (action === 'ACCEPT') {
+        // Only allow ACCEPT if booking is still PENDING (not yet expired/rejected/completed)
+        if (currentStatus !== 'BOOKING_PENDING') {
+          return errorResponse(`Cannot accept booking with status ${currentStatus}. Only BOOKING_PENDING bookings can be accepted.`, 409)
+        }
+
+        await dynamoDB.send(new UpdateCommand({
+          TableName: TABLE_NAMES.BOOKINGS,
+          Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
+          UpdateExpression: 'SET bookingStatus = :confirmed, #st = :confirmed, driverResponseStatus = :accepted, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now',
+          ExpressionAttributeNames: { '#st': 'status' },
+          ExpressionAttributeValues: {
+            ':confirmed': 'CONFIRMED',
+            ':accepted': 'ACCEPTED',
+            ':admin': 'ADMIN',
+            ':now': now,
+          },
+        }))
+
+        // Notify CGM that admin accepted
+        try {
+          await createNotification(booking.cgmId, 'BOOKING_CONFIRMED', {
+            bookingId,
+            cabNumber: booking.cabNumber,
+            bookingDate: booking.bookingDate,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            confirmedAt: now,
+            adminName: caller.name,
+          }).catch(() => {})
+        } catch (_) { /* non-critical */ }
+
+        return successResponse({ bookingId, status: 'CONFIRMED', driverResponseStatus: 'ACCEPTED' })
+      }
+
+      // REJECT action — admin rejects an expired/pending booking
+      if (action === 'REJECT') {
+        if (currentStatus !== 'BOOKING_PENDING') {
+          return errorResponse(`Cannot reject booking with status ${currentStatus}. Only BOOKING_PENDING bookings can be rejected.`, 409)
+        }
+
+        const lockPk = `CAB#${booking.cabId}#${booking.bookingDate}`
+        const lockTimes = booking.startTime && booking.endTime
+          ? intervalLockTimes({ startTime: booking.startTime, endTime: booking.endTime })
+          : []
+
+        const transactItems: any[] = [
+          {
+            Update: {
+              TableName: TABLE_NAMES.BOOKINGS,
+              Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
+              UpdateExpression: 'SET bookingStatus = :rejected, #st = :rejected, driverResponseStatus = :rejected_response, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, rejectionReason = :reason',
+              ExpressionAttributeNames: { '#st': 'status' },
+              ExpressionAttributeValues: {
+                ':rejected': 'REJECTED',
+                ':rejected_response': 'REJECTED',
+                ':admin': 'ADMIN',
+                ':now': now,
+                ':reason': reason || 'Rejected by admin',
+              },
+            },
+          },
+          ...lockTimes.map(t => ({
+            Delete: {
+              TableName: TABLE_NAMES.SLOTS,
+              Key: { PK: lockPk, SK: `LOCK#${t}` },
+            },
+          })),
+        ]
+
+        await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
+
+        // Notify CGM that admin rejected
+        try {
+          await createNotification(booking.cgmId, 'BOOKING_REJECTED', {
+            bookingId,
+            cabNumber: booking.cabNumber,
+            bookingDate: booking.bookingDate,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            adminName: caller.name,
+            reason: reason || 'Rejected by admin',
+          }).catch(() => {})
+        } catch (_) { /* non-critical */ }
+
+        return successResponse({ bookingId, status: 'REJECTED', driverResponseStatus: 'REJECTED' })
+      }
+
+      // CANCEL and COMPLETE actions
       const terminalStatuses = ['COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
       if (terminalStatuses.includes(currentStatus)) {
         return errorResponse(`Booking is already ${currentStatus} and cannot be changed`, 409)
       }
 
-      const now = new Date().toISOString()
       const newStatus = action === 'CANCEL' ? 'CANCELLED' : 'COMPLETED'
 
       if (action === 'CANCEL') {
@@ -118,10 +209,11 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             Update: {
               TableName: TABLE_NAMES.BOOKINGS,
               Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-              UpdateExpression: 'SET bookingStatus = :status, #st = :status, cancelledAt = :now, updatedAt = :now, cancelReason = :reason',
+              UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, cancelledAt = :now, updatedAt = :now, cancelReason = :reason',
               ExpressionAttributeNames: { '#st': 'status' },
               ExpressionAttributeValues: {
                 ':status': 'CANCELLED',
+                ':admin': 'ADMIN',
                 ':now': now,
                 ':reason': reason || 'Cancelled by admin',
               },
@@ -147,13 +239,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
         await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
       } else {
-        // Force complete: just update booking + make cab available
+        // Force complete: update booking + make cab available
         await dynamoDB.send(new UpdateCommand({
           TableName: TABLE_NAMES.BOOKINGS,
           Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET bookingStatus = :status, #st = :status, completedAt = :now, updatedAt = :now',
+          UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, completedAt = :now, updatedAt = :now',
           ExpressionAttributeNames: { '#st': 'status' },
-          ExpressionAttributeValues: { ':status': 'COMPLETED', ':now': now },
+          ExpressionAttributeValues: { ':status': 'COMPLETED', ':admin': 'ADMIN', ':now': now },
         }))
         await dynamoDB.send(new UpdateCommand({
           TableName: TABLE_NAMES.CABS,
@@ -175,7 +267,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return successResponse({ bookingId, status: newStatus })
     } catch (error: any) {
       if (error?.name === 'TransactionCanceledException') {
-        return errorResponse('Could not cancel booking — concurrent update. Please try again.', 409)
+        return errorResponse('Could not update booking — concurrent update. Please try again.', 409)
       }
       console.error('adminUpdateBooking failed', error)
       return Responses.serverError()

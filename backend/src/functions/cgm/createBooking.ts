@@ -88,6 +88,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const bookingId = randomUUID()
     const now = new Date().toISOString()
     const confirmationDeadline = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    const driverResponseDeadline = confirmationDeadline  // 30-minute window from booking creation
     const lockPk = `CAB#${cabId}#${bookingDate}`
     const lockTimes = intervalLockTimes({ startTime, endTime })
 
@@ -135,6 +136,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 bookingStatus: 'BOOKING_PENDING',
                 status: 'BOOKING_PENDING',
                 confirmationDeadline,
+                driverResponseStatus: 'PENDING',
+                driverResponseDeadline,
+                statusUpdatedBy: 'CGM',
+                statusUpdatedAt: now,
                 createdAt: now,
                 updatedAt: now,
               },
