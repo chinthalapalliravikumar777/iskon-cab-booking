@@ -96,3 +96,13 @@
   .section-title    { @apply text-lg font-semibold text-gray-900; }
   .section-subtitle { @apply text-sm text-gray-500 mt-0.5; }
 }
+
+@layer utilities {
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-slide-in {
+    animation: slide-in 0.25s ease-out;
+  }
+}

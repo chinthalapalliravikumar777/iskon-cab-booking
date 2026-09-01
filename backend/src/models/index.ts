@@ -46,7 +46,7 @@ export type BookingStatus =
   | 'BOOKED'
   | 'ACCEPTED'
   | 'ON_THE_WAY'
-  | 'ARRIVED'
+  | 'ARRIVED' // legacy compatibility
   | 'ON_SITE'
   | 'COMPLETED'
   | 'CANCELLED'

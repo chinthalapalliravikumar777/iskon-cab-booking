@@ -9,6 +9,12 @@ type ManagedRole = 'CGM' | 'DRIVER'
 type AccountFilter = 'ALL' | ManagedRole
 type CreatedUser = { userId?: string; email: string; name: string; mobile?: string; role: ManagedRole; status?: string; enabled?: boolean }
 
+interface AdminStats {
+  cabs: { total: number; available: number; onTrip: number; maintenance: number }
+  bookings: { total: number; active: number; today: number }
+  users: { cgms: number; drivers: number }
+}
+
 const StatCard = ({
   icon, label, value, color, sublabel
 }: {
@@ -53,6 +59,7 @@ export default function AdminDashboard() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [stats, setStats] = useState<AdminStats | null>(null)
 
   const loadUsers = async () => {
     try {
@@ -63,7 +70,16 @@ export default function AdminDashboard() {
     }
   }
 
-  useEffect(() => { void loadUsers() }, [])
+  const loadStats = async () => {
+    try {
+      const res = await apiClient.get('/v1/admin/stats')
+      setStats(res.data.data)
+    } catch {
+      // Non-critical — stats just won't show
+    }
+  }
+
+  useEffect(() => { void loadUsers(); void loadStats() }, [])
 
   const filteredUsers = accountFilter === 'ALL'
     ? createdUsers
@@ -128,10 +144,10 @@ export default function AdminDashboard() {
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon="🚗" label="Total Cabs"      value="7"  color="bg-blue-50"    sublabel="0 available" />
-        <StatCard icon="👤" label="Active CGMs"     value="25" color="bg-purple-50"  sublabel="All active" />
-        <StatCard icon="🧑‍✈️" label="Drivers"        value="0"  color="bg-emerald-50" sublabel="Add drivers" />
-        <StatCard icon="📋" label="Total Bookings"  value="0"  color="bg-orange-50"  sublabel="This month" />
+        <StatCard icon="🚗" label="Total Cabs"     value={stats ? String(stats.cabs.total) : '—'}  color="bg-blue-50"    sublabel={stats ? `${stats.cabs.available} available` : 'Loading...'} />
+        <StatCard icon="👤" label="Active CGMs"    value={stats ? String(stats.users.cgms) : '—'}  color="bg-purple-50"  sublabel="Enabled accounts" />
+        <StatCard icon="🧑‍✈️" label="Drivers"       value={stats ? String(stats.users.drivers) : '—'} color="bg-emerald-50" sublabel="Enabled accounts" />
+        <StatCard icon="📋" label="Bookings Today" value={stats ? String(stats.bookings.today) : '—'} color="bg-orange-50" sublabel={stats ? `${stats.bookings.active} active` : 'Loading...'} />
       </div>
 
       {/* System status banner */}

@@ -51,9 +51,10 @@ export class AuthStack extends cdk.Stack {
       userPool: this.userPool,
       userPoolClientName: 'iskon-web-client',
       authFlows: {
-        // USER_SRP_AUTH is the secure authentication flow (password never sent in plaintext)
+        // Support the web app's username/password auth flow used by amazon-cognito-identity-js
+        userPassword: true,
+        // Keep SRP and admin-password flows enabled for compatibility
         userSrp: true,
-        // Allow admin to set temporary passwords
         adminUserPassword: true,
       },
       // Token validity periods

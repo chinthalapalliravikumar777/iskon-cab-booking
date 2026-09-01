@@ -87,6 +87,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const bookingId = randomUUID()
     const now = new Date().toISOString()
+    const confirmationDeadline = new Date(Date.now() + 30 * 60 * 1000).toISOString()
     const lockPk = `CAB#${cabId}#${bookingDate}`
     const lockTimes = intervalLockTimes({ startTime, endTime })
 
@@ -131,7 +132,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 timeSlot,
                 startTime,
                 endTime,
-                bookingStatus: 'BOOKED',
+                bookingStatus: 'BOOKING_PENDING',
+                status: 'BOOKING_PENDING',
+                confirmationDeadline,
                 createdAt: now,
                 updatedAt: now,
               },
@@ -149,14 +152,34 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       })
     )
 
+    // Send a single notification to assigned driver if one exists
+    try {
+      const { createNotification } = await import('../../utils/notifications')
+      if (cab.assignedDriverId) {
+        await createNotification(cab.assignedDriverId, 'BOOKING_REQUEST', {
+          bookingId,
+          cabId,
+          cabNumber: cab.cabNumber,
+          bookingDate,
+          startTime,
+          endTime,
+          confirmationDeadline,
+          pickupDetails: pickupDetails?.trim() || '',
+        })
+      }
+    } catch (err) {
+      console.warn('Failed to create driver notification', err)
+    }
+
     return successResponse({
       bookingId,
       cabId,
       bookingDate,
       timeSlot,
       siteLocation,
-      bookingStatus: 'BOOKED',
+      status: 'BOOKING_PENDING',
       createdAt: now,
+      confirmationDeadline,
     })
   } catch (error: any) {
     if (error?.name === 'TransactionCanceledException') {

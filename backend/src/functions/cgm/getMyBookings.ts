@@ -17,10 +17,18 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ScanIndexForward: false,
     }))
 
-    const bookings = (result.Items || []).map(booking => ({
-      ...booking,
-      cgmMobile: undefined,
-    }))
+    const ACTIVE_STATUSES = ['BOOKING_PENDING', 'CONFIRMED', 'ACCEPTED', 'ON_THE_WAY', 'ON_SITE', 'ARRIVED']
+
+    const bookings = (result.Items || []).map(booking => {
+      const status = booking.bookingStatus || booking.status || ''
+      const isActive = ACTIVE_STATUSES.includes(status)
+      return {
+        ...booking,
+        // Only expose driver mobile for active bookings — not historical ones
+        driverMobile: isActive ? booking.driverMobile : undefined,
+        cgmMobile: undefined,
+      }
+    })
     return successResponse(bookings)
   } catch (error) {
     console.error('getMyBookings failed', error)

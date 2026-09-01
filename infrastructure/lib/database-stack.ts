@@ -17,6 +17,8 @@ export class DatabaseStack extends cdk.Stack {
   public readonly slotsTable: dynamodb.Table
   public readonly projectsTable: dynamodb.Table
   public readonly profilePhotosBucket: s3.Bucket
+  public readonly notificationsTable: dynamodb.Table
+  public readonly connectionsTable: dynamodb.Table
 
   constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props)
@@ -116,5 +118,28 @@ export class DatabaseStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SlotsTableName', { value: this.slotsTable.tableName })
       new cdk.CfnOutput(this, 'ProjectsTableName', { value: this.projectsTable.tableName })
       new cdk.CfnOutput(this, 'ProfilePhotosBucketName', { value: this.profilePhotosBucket.bucketName })
+      // Notifications table for in-app notification history
+      this.notificationsTable = new dynamodb.Table(this, 'NotificationsTable', {
+        tableName: 'iskon-notifications',
+        partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      })
+
+    new cdk.CfnOutput(this, 'NotificationsTableName', { value: this.notificationsTable.tableName })
+
+    // ── WebSocket Connections Table ──────────────────────────────────────────
+    // Tracks active WebSocket connections per user for real-time push
+    this.connectionsTable = new dynamodb.Table(this, 'ConnectionsTable', {
+      tableName: 'iskon-connections',
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey:      { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,   // OK to destroy — ephemeral connection state
+      timeToLiveAttribute: 'ttl',                  // Auto-expire stale connections
+    })
+
+    new cdk.CfnOutput(this, 'ConnectionsTableName', { value: this.connectionsTable.tableName })
   }
 }

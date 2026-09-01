@@ -1,6 +1,8 @@
 import {
   AdminCreateUserCommand,
   AdminSetUserPasswordCommand,
+  AdminEnableUserCommand,
+  AdminDisableUserCommand,
   CognitoIdentityProviderClient,
   ListUsersCommand,
 } from '@aws-sdk/client-cognito-identity-provider'
@@ -138,5 +140,46 @@ export async function listUsers(event: APIGatewayProxyEvent) {
   } catch (error) {
     console.error('Failed to list Cognito users', error)
     return errorResponse('Could not load user accounts.', 500)
+  }
+}
+
+/**
+ * PATCH /v1/admin/users/{username}/status
+ * Enable or disable a Cognito user account.
+ */
+export async function toggleUserStatus(event: APIGatewayProxyEvent) {
+  const caller = requireRole(event, ['ADMIN'])
+  if (!caller) return errorResponse('Only administrators can change user status.', 403)
+
+  const username = event.pathParameters?.username
+  if (!username) return errorResponse('Username is required.')
+
+  let body: { enabled?: boolean }
+  try {
+    body = JSON.parse(event.body || '{}')
+  } catch {
+    return errorResponse('Request body must be valid JSON.')
+  }
+
+  if (body.enabled === undefined) return errorResponse('enabled (true/false) is required.')
+
+  try {
+    const decodedUsername = decodeURIComponent(username)
+    if (body.enabled) {
+      await cognitoClient.send(new AdminEnableUserCommand({
+        UserPoolId: process.env.USER_POOL_ID,
+        Username: decodedUsername,
+      }))
+    } else {
+      await cognitoClient.send(new AdminDisableUserCommand({
+        UserPoolId: process.env.USER_POOL_ID,
+        Username: decodedUsername,
+      }))
+    }
+    return successResponse({ username: decodedUsername, enabled: body.enabled })
+  } catch (error: any) {
+    if (error?.name === 'UserNotFoundException') return errorResponse('No user exists with this login ID.', 404)
+    console.error('Failed to toggle user status', error)
+    return errorResponse('Could not update user status.', 500)
   }
 }
