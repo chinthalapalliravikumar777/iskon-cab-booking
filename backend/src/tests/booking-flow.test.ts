@@ -98,6 +98,60 @@ test('createBooking returns conflict when cab is already booked for the same slo
   ;(dynamoDB as any).send = originalSend
 })
 
+test('updateTripStatus accepts ON_SITE status for the assigned driver', async () => {
+  ;(dynamoDB as any).send = async (command: any) => {
+    const input = command.input || command
+    if (input.TableName === 'iskon-bookings' && input.Key?.['PK'] === 'BOOKING#booking-2') {
+      return {
+        Item: {
+          PK: 'BOOKING#booking-2',
+          SK: 'DETAILS',
+          bookingId: 'booking-2',
+          cabId: 'CAB-500',
+          driverId: 'driver-2',
+          driverName: 'Assigned Driver',
+          bookingStatus: 'ON_THE_WAY',
+        },
+      }
+    }
+
+    if (input.TableName === 'iskon-bookings' && input.Key?.['PK'] === 'BOOKING#booking-2') {
+      return { Attributes: { bookingId: 'booking-2', bookingStatus: 'ON_SITE' } }
+    }
+
+    if (input.TableName === 'iskon-cabs') {
+      return { Attributes: { PK: 'CAB#CAB-500', SK: 'DETAILS', status: 'ON_TRIP' } }
+    }
+
+    return { Item: null }
+  }
+
+  const event: any = {
+    requestContext: {
+      authorizer: {
+        jwt: {
+          claims: {
+            sub: 'driver-2',
+            email: 'driver2@iskon.in',
+            'custom:role': 'DRIVER',
+            name: 'Assigned Driver',
+          },
+        },
+      },
+    },
+    pathParameters: { bookingId: 'booking-2' },
+    body: JSON.stringify({ status: 'ON_SITE' }),
+  }
+
+  const result = await updateTripStatusHandler(event)
+  assert.equal(result.statusCode, 200)
+  const body = JSON.parse(result.body)
+  assert.equal(body.success, true)
+  assert.equal(body.data.status, 'ON_SITE')
+
+  ;(dynamoDB as any).send = originalSend
+})
+
 test('updateTripStatus rejects a driver who does not own the booking', async () => {
   ;(dynamoDB as any).send = async (command: any) => {
     const input = command.input || command
