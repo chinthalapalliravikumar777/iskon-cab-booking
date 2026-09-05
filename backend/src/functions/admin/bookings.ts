@@ -57,17 +57,25 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         scanParams.ExpressionAttributeValues = values
       }
 
-      const result = await dynamoDB.send(new ScanCommand(scanParams))
-      const items = (result.Items || []).sort((a, b) => {
+      const items: Record<string, any>[] = []
+      let lastEvaluatedKey: Record<string, unknown> | undefined
+      do {
+        scanParams.ExclusiveStartKey = lastEvaluatedKey
+        const result = await dynamoDB.send(new ScanCommand(scanParams))
+        items.push(...((result.Items || []) as Record<string, any>[]))
+        lastEvaluatedKey = result.LastEvaluatedKey
+      } while (lastEvaluatedKey)
+      items.sort((a, b) => {
         const dateA = a.bookingDate || ''
         const dateB = b.bookingDate || ''
         if (dateA !== dateB) return dateB.localeCompare(dateA)
         return (b.createdAt || '').localeCompare(a.createdAt || '')
       })
+      console.info('adminListBookings', { userId: caller.userId, role: caller.role, filters: { date, status, driverId, cgmId }, count: items.length })
 
       return successResponse(items)
     } catch (error) {
-      console.error('adminListBookings failed', error)
+      console.error('adminListBookings failed', { userId: caller.userId, error })
       return Responses.serverError()
     }
   }
@@ -117,7 +125,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           Update: {
             TableName: TABLE_NAMES.BOOKINGS,
             Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-            UpdateExpression: 'SET bookingStatus = :confirmed, #st = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, driverId = :driverId, driverName = :driverName',
+            UpdateExpression: 'SET bookingStatus = :confirmed, #st = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, respondedBy = :admin, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, driverId = :driverId, driverName = :driverName',
             ExpressionAttributeNames: { '#st': 'status' },
             ExpressionAttributeValues: {
               ':confirmed': 'CONFIRMED', ':accepted': 'ACCEPTED', ':admin': 'ADMIN', ':now': now,
@@ -151,6 +159,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             driverName,
             driverMobile: booking.driverMobile || cab?.assignedDriverMobile || '',
           }).catch(() => {})
+          if (driverId && driverId !== 'UNASSIGNED') {
+            await createNotification(driverId, 'BOOKING_CONFIRMED_ADMIN', {
+              bookingId,
+              cgmName: booking.cgmName,
+              cgmMobile: booking.cgmMobile || '',
+              projectName: booking.projectName || booking.siteLocation,
+              cabNumber: booking.cabNumber,
+              bookingDate: booking.bookingDate,
+              startTime: booking.startTime,
+              endTime: booking.endTime,
+              adminName: caller.name,
+            }).catch(() => {})
+          }
         } catch (_) { /* non-critical */ }
 
         return successResponse({ bookingId, status: 'CONFIRMED', driverResponseStatus: 'ACCEPTED', driverId, driverName })
@@ -204,6 +225,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             adminName: caller.name,
             reason: reason || 'Rejected by admin',
           }).catch(() => {})
+          if (booking.driverId && booking.driverId !== 'UNASSIGNED') {
+            await createNotification(booking.driverId, 'BOOKING_REJECTED_ADMIN', {
+              bookingId,
+              cgmName: booking.cgmName,
+              projectName: booking.projectName || booking.siteLocation,
+              cabNumber: booking.cabNumber,
+              bookingDate: booking.bookingDate,
+              startTime: booking.startTime,
+              endTime: booking.endTime,
+              adminName: caller.name,
+              reason: reason || 'Rejected by admin',
+            }).catch(() => {})
+          }
         } catch (_) { /* non-critical */ }
 
         return successResponse({ bookingId, status: 'REJECTED', driverResponseStatus: 'REJECTED' })

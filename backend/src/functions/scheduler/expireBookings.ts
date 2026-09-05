@@ -12,14 +12,19 @@ export async function handler(): Promise<APIGatewayProxyResult | void> {
 
     // Scan for pending driver responses whose deadline <= now. For production with many items,
     // add a GSI to query by response status and deadline instead of scanning.
-    const result = await dynamoDB.send(new ScanCommand({
-      TableName: TABLE_NAMES.BOOKINGS,
-      FilterExpression: 'driverResponseStatus = :pending AND driverResponseDeadline <= :now',
-      ExpressionAttributeValues: { ':pending': 'PENDING', ':now': now },
-      ProjectionExpression: 'PK, SK, bookingId, cgmId, cabId, cabNumber, bookingDate, startTime, endTime, driverResponseStatus, driverResponseDeadline',
-    }))
-
-    const items = result.Items || []
+    const items: Record<string, any>[] = []
+    let lastEvaluatedKey: Record<string, unknown> | undefined
+    do {
+      const result = await dynamoDB.send(new ScanCommand({
+        TableName: TABLE_NAMES.BOOKINGS,
+        FilterExpression: 'driverResponseStatus = :pending AND driverResponseDeadline <= :now',
+        ExpressionAttributeValues: { ':pending': 'PENDING', ':now': now },
+        ProjectionExpression: 'PK, SK, bookingId, cgmId, cabId, cabNumber, bookingDate, startTime, endTime, driverResponseStatus, driverResponseDeadline',
+        ExclusiveStartKey: lastEvaluatedKey,
+      }))
+      items.push(...((result.Items || []) as Record<string, any>[]))
+      lastEvaluatedKey = result.LastEvaluatedKey
+    } while (lastEvaluatedKey)
     for (const booking of items) {
       try {
         const bookingId = booking.bookingId

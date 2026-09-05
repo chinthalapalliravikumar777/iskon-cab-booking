@@ -138,7 +138,7 @@ export default function AdminBookings() {
   return (
     <AppLayout title="All Bookings" subtitle="View, cancel or force-complete any booking">
       {message && <div className="alert-success mb-4">{message}</div>}
-      {error   && <div className="alert-error mb-4">{error}</div>}
+      {error   && <div className="alert-error mb-4"><span className="flex-1">{error}</span><button type="button" className="font-semibold underline" onClick={() => void load()}>Retry</button></div>}
 
       {/* Filters */}
       <div className="card mb-4">
@@ -215,9 +215,13 @@ export default function AdminBookings() {
                         {b.bookingDate} · {b.startTime && b.endTime ? `${b.startTime}–${b.endTime}` : b.timeSlot}
                       </p>
                       <div className="flex flex-wrap gap-x-4 mt-1.5 text-xs text-gray-400">
+                        <span>ID: {b.bookingId}</span>
                         <span>🚗 {b.cabNumber}</span>
                         <span>👤 CGM: {b.cgmName}</span>
+                        {b.cgmMobile && <span>CGM mobile: {b.cgmMobile}</span>}
                         <span>🧑‍✈️ Driver: {b.driverName}</span>
+                        <span>Response: {b.driverResponseStatus || '—'}</span>
+                        <span>Created: {b.createdAt ? new Date(b.createdAt).toLocaleString() : '—'}</span>
                         {b.pickupDetails && <span>📍 {b.pickupDetails}</span>}
                       </div>
                     </div>

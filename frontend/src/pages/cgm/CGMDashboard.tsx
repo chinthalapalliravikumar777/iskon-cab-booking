@@ -67,11 +67,14 @@ export default function CGMDashboard() {
   const [error, setError] = useState('')
   const [toasts, setToasts] = useState<ToastMessage[]>([])
 
-  const loadBookings = () =>
-    apiClient.get('/v1/cgm/bookings')
+  const loadBookings = () => {
+    setLoading(true)
+    setError('')
+    return apiClient.get('/v1/cgm/bookings')
       .then(r => setBookings(r.data.data || []))
-      .catch(() => setError('Could not load your bookings.'))
+      .catch(() => setError('Unable to load bookings. Please try again.'))
       .finally(() => setLoading(false))
+  }
 
   useEffect(() => { void loadBookings() }, [])
 
@@ -181,7 +184,7 @@ export default function CGMDashboard() {
             View all →
           </Link>
         </div>
-        {error && <div className="alert-error mb-4">{error}</div>}
+        {error && <div className="alert-error mb-4"><span className="flex-1">{error}</span><button type="button" className="font-semibold underline" onClick={() => void loadBookings()}>Retry</button></div>}
         {loading ? (
           <div className="py-12 text-center text-sm text-gray-400">Loading...</div>
         ) : bookings.length === 0 ? (

@@ -9,20 +9,28 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   if (!caller) return Responses.unauthorized()
 
   try {
-    const result = await dynamoDB.send(new QueryCommand({
-      TableName: TABLE_NAMES.BOOKINGS,
-      IndexName: 'driver-bookings-index',
-      KeyConditionExpression: 'driverId = :driverId',
-      ExpressionAttributeValues: { ':driverId': caller.userId },
-      ScanIndexForward: true,
-    }))
+    const trips: Record<string, any>[] = []
+    let lastEvaluatedKey: Record<string, unknown> | undefined
+    do {
+      const result = await dynamoDB.send(new QueryCommand({
+        TableName: TABLE_NAMES.BOOKINGS,
+        IndexName: 'driver-bookings-index',
+        KeyConditionExpression: 'driverId = :driverId',
+        ExpressionAttributeValues: { ':driverId': caller.userId },
+        ScanIndexForward: true,
+        ExclusiveStartKey: lastEvaluatedKey,
+      }))
+      trips.push(...((result.Items || []) as Record<string, any>[]))
+      lastEvaluatedKey = result.LastEvaluatedKey
+    } while (lastEvaluatedKey)
 
-    return successResponse((result.Items || []).map(booking => ({
+    console.info('getMyTrips', { userId: caller.userId, role: caller.role, count: trips.length })
+    return successResponse(trips.map(booking => ({
       ...booking,
       driverMobile: undefined,
     })))
   } catch (error) {
-    console.error('getMyTrips failed', error)
+    console.error('getMyTrips failed', { userId: caller.userId, error })
     return Responses.serverError()
   }
 }

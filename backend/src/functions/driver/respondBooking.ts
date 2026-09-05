@@ -45,7 +45,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         await dynamoDB.send(new UpdateCommand({
           TableName: TABLE_NAMES.BOOKINGS,
           Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET bookingStatus = :confirmed, #legacyStatus = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, statusUpdatedBy = :driver, statusUpdatedAt = :now, confirmedAt = :now, updatedAt = :now',
+          UpdateExpression: 'SET bookingStatus = :confirmed, #legacyStatus = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, respondedBy = :driver, statusUpdatedBy = :driver, statusUpdatedAt = :now, confirmedAt = :now, updatedAt = :now',
           ConditionExpression: '(#legacyStatus = :pending OR bookingStatus = :pending) AND confirmationDeadline > :now',
           ExpressionAttributeNames: { '#legacyStatus': 'status' },
           ExpressionAttributeValues: { ':confirmed': 'CONFIRMED', ':pending': 'BOOKING_PENDING', ':accepted': 'ACCEPTED', ':driver': 'DRIVER', ':now': now },
@@ -93,7 +93,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Update: {
           TableName: TABLE_NAMES.BOOKINGS,
           Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET bookingStatus = :rejected, #legacyStatus = :rejected, driverResponseStatus = :rejected_response, driverResponseAt = :now, statusUpdatedBy = :driver, statusUpdatedAt = :now, rejectedAt = :now, updatedAt = :now',
+          UpdateExpression: 'SET bookingStatus = :rejected, #legacyStatus = :rejected, driverResponseStatus = :rejected_response, driverResponseAt = :now, respondedBy = :driver, statusUpdatedBy = :driver, statusUpdatedAt = :now, rejectedAt = :now, updatedAt = :now',
           ConditionExpression: '(#legacyStatus = :pending OR bookingStatus = :pending) AND confirmationDeadline > :now',
           ExpressionAttributeNames: { '#legacyStatus': 'status' },
           ExpressionAttributeValues: { ':rejected': 'REJECTED', ':rejected_response': 'REJECTED', ':pending': 'BOOKING_PENDING', ':driver': 'DRIVER', ':now': now },

@@ -71,12 +71,13 @@ export default function DriverNotifications({ onRefresh }: Props) {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                  <p className="font-bold text-gray-900 text-sm">New Booking Request</p>
+                  <p className="font-bold text-gray-900 text-sm">NEW BOOKING REQUEST</p>
                 </div>
                 <p className="text-sm text-gray-700">
                   <strong>{p.bookingDate}</strong> · {p.startTime}–{p.endTime}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">Cab: {p.cabNumber}</p>
+                {p.projectName && <p className="text-xs text-gray-500 mt-0.5">Project: {p.projectName}</p>}
                 {p.cgmName && <p className="text-xs text-gray-500 mt-0.5">CGM: {p.cgmName}</p>}
                 {p.cgmMobile && (
                   <a href={`tel:${p.cgmMobile}`} className="inline-flex text-xs font-semibold text-blue-700 hover:text-blue-900 mt-1">
@@ -126,6 +127,8 @@ export default function DriverNotifications({ onRefresh }: Props) {
         const MSGS: Record<string, string> = {
           BOOKING_CANCELLED_ADMIN: '🚫 Admin cancelled a booking',
           BOOKING_COMPLETED_ADMIN: '✅ Admin marked a booking complete',
+          BOOKING_CONFIRMED_ADMIN: '✅ Admin confirmed a booking',
+          BOOKING_REJECTED_ADMIN: '❌ Admin rejected a booking',
         }
         return (
           <div key={n.notificationId} className="card border border-gray-200 flex items-center justify-between">
@@ -140,7 +143,7 @@ export default function DriverNotifications({ onRefresh }: Props) {
         )
       })}
 
-      {error && <div className="alert-error">{error}</div>}
+      {error && <div className="alert-error"><span className="flex-1">{error}</span><button type="button" className="font-semibold underline" onClick={() => void load()}>Retry</button></div>}
     </div>
   )
 }

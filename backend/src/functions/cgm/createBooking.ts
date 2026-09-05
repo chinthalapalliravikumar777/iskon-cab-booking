@@ -166,6 +166,14 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ],
       })
     )
+    console.info('bookingCreated', {
+      bookingId,
+      cgmId: caller.userId,
+      driverId: cab.assignedDriverId || 'UNASSIGNED',
+      cabId,
+      bookingDate,
+      status: 'BOOKING_PENDING',
+    })
 
     // Send a single notification to assigned driver if one exists
     try {

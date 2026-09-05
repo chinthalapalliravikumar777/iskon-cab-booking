@@ -67,7 +67,7 @@ export default function DriverDashboard() {
   const loadTrips = useCallback(() =>
     apiClient.get('/v1/driver/trips')
       .then(r => setTrips(r.data.data || []))
-      .catch(() => setError('Could not load your trips.')),
+      .catch(() => setError('Unable to load trips. Please try again.')),
   [])
 
   const loadCab = useCallback(() => {
@@ -163,7 +163,7 @@ export default function DriverDashboard() {
       {/* Notifications panel */}
       <DriverNotifications onRefresh={loadTrips} />
 
-      {error && <div className="alert-error mb-4">{error}</div>}
+      {error && <div className="alert-error mb-4"><span className="flex-1">{error}</span><button type="button" className="font-semibold underline" onClick={() => { setError(''); void loadTrips() }}>Retry</button></div>}
 
       {/* Status cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
@@ -246,7 +246,7 @@ export default function DriverDashboard() {
           </div>
           <div className="space-y-3">
             {trips
-              .filter(t => getStatus(t) === 'COMPLETED' || getStatus(t) === 'CANCELLED')
+              .filter(t => ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(getStatus(t)))
               .slice(0, 10)
               .map(trip => (
                 <TripCard

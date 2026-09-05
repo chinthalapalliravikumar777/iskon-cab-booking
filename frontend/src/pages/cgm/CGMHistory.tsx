@@ -53,12 +53,16 @@ export default function CGMHistory() {
   const [error, setError] = useState('')
   const [filterStatus, setFilterStatus] = useState('ALL')
 
-  useEffect(() => {
-    apiClient.get('/v1/cgm/bookings')
+  const loadBookings = () => {
+    setLoading(true)
+    setError('')
+    return apiClient.get('/v1/cgm/bookings')
       .then(r => setBookings(r.data.data || []))
-      .catch(() => setError('Could not load your bookings.'))
+      .catch(() => setError('Unable to load bookings. Please try again.'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { void loadBookings() }, [])
 
   const getStatus = (b: Booking) => b.bookingStatus || b.status || 'UNKNOWN'
 
@@ -77,6 +81,8 @@ export default function CGMHistory() {
           { value: 'ACTIVE', label: 'Active' },
           { value: 'COMPLETED', label: 'Completed' },
           { value: 'CANCELLED', label: 'Cancelled' },
+          { value: 'REJECTED', label: 'Rejected' },
+          { value: 'EXPIRED', label: 'Expired' },
         ].map(tab => (
           <button
             key={tab.value}
@@ -92,7 +98,7 @@ export default function CGMHistory() {
         ))}
       </div>
 
-      {error && <div className="alert-error mb-4">{error}</div>}
+      {error && <div className="alert-error mb-4"><span className="flex-1">{error}</span><button type="button" className="font-semibold underline" onClick={() => void loadBookings()}>Retry</button></div>}
 
       {loading ? (
         <div className="py-16 text-center text-sm text-gray-400">Loading bookings...</div>
