@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
-import { GetCommand, ScanCommand, UpdateCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, QueryCommand, ScanCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import { requireRole } from '../../utils/auth'
 import { dynamoDB, TABLE_NAMES } from '../../utils/dynamodb'
 import { errorResponse, successResponse, Responses } from '../../utils/response'
@@ -9,7 +9,7 @@ import { createNotification } from '../../utils/notifications'
 /**
  * Admin bookings handler.
  * GET  /v1/admin/bookings           — list all bookings (with optional ?date= or ?status= filter)
- * PATCH /v1/admin/bookings/{id}     — cancel or force-complete a booking
+ * PATCH /v1/admin/bookings/{id}     — admin booking actions
  */
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const caller = requireRole(event, ['ADMIN'])
@@ -76,16 +76,16 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   if (method === 'PATCH') {
     if (!bookingId) return errorResponse('bookingId is required')
 
-    let body: { action?: 'CANCEL' | 'COMPLETE' | 'ACCEPT' | 'REJECT'; reason?: string }
+    let body: { action?: 'CANCEL' | 'COMPLETE' | 'ACCEPT' | 'REJECT' | 'REASSIGN'; reason?: string; cabId?: string }
     try {
       body = JSON.parse(event.body || '{}')
     } catch {
       return errorResponse('Invalid request body')
     }
 
-    const { action, reason } = body
-    if (!['CANCEL', 'COMPLETE', 'ACCEPT', 'REJECT'].includes(action || '')) {
-      return errorResponse('Action must be CANCEL, COMPLETE, ACCEPT, or REJECT')
+    const { action, reason, cabId } = body
+    if (!['CANCEL', 'COMPLETE', 'ACCEPT', 'REJECT', 'REASSIGN'].includes(action || '')) {
+      return errorResponse('Action must be CANCEL, COMPLETE, ACCEPT, REJECT, or REASSIGN')
     }
 
     try {
@@ -100,25 +100,43 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const currentStatus = booking.bookingStatus || booking.status || ''
       const now = new Date().toISOString()
 
-      // ACCEPT action — admin accepts an expired/pending booking (moves it to CONFIRMED)
+      // ACCEPT action — admins can take over pending requests after the driver window expires.
       if (action === 'ACCEPT') {
-        // Only allow ACCEPT if booking is still PENDING (not yet expired/rejected/completed)
-        if (currentStatus !== 'BOOKING_PENDING') {
-          return errorResponse(`Cannot accept booking with status ${currentStatus}. Only BOOKING_PENDING bookings can be accepted.`, 409)
+        if (!['BOOKING_PENDING', 'EXPIRED'].includes(currentStatus)) {
+          return errorResponse(`Cannot accept booking with status ${currentStatus}.`, 409)
         }
 
-        await dynamoDB.send(new UpdateCommand({
-          TableName: TABLE_NAMES.BOOKINGS,
-          Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET bookingStatus = :confirmed, #st = :confirmed, driverResponseStatus = :accepted, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now',
-          ExpressionAttributeNames: { '#st': 'status' },
-          ExpressionAttributeValues: {
-            ':confirmed': 'CONFIRMED',
-            ':accepted': 'ACCEPTED',
-            ':admin': 'ADMIN',
-            ':now': now,
-          },
+        const cabResp = await dynamoDB.send(new GetCommand({
+          TableName: TABLE_NAMES.CABS,
+          Key: { PK: `CAB#${booking.cabId}`, SK: 'DETAILS' },
         }))
+        const cab = cabResp.Item
+        const driverId = booking.driverId !== 'UNASSIGNED' ? booking.driverId : cab?.assignedDriverId
+        const driverName = booking.driverName !== 'Pending Assignment' ? booking.driverName : cab?.assignedDriverName
+        const transactItems: any[] = [{
+          Update: {
+            TableName: TABLE_NAMES.BOOKINGS,
+            Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
+            UpdateExpression: 'SET bookingStatus = :confirmed, #st = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, driverId = :driverId, driverName = :driverName',
+            ExpressionAttributeNames: { '#st': 'status' },
+            ExpressionAttributeValues: {
+              ':confirmed': 'CONFIRMED', ':accepted': 'ACCEPTED', ':admin': 'ADMIN', ':now': now,
+              ':driverId': driverId || 'UNASSIGNED', ':driverName': driverName || 'Pending Assignment',
+            },
+          },
+        }]
+        if (cab && cab.status === 'AVAILABLE') {
+          transactItems.push({
+            Update: {
+              TableName: TABLE_NAMES.CABS,
+              Key: { PK: `CAB#${booking.cabId}`, SK: 'DETAILS' },
+              UpdateExpression: 'SET #status = :assigned, updatedAt = :now',
+              ExpressionAttributeNames: { '#status': 'status' },
+              ExpressionAttributeValues: { ':assigned': 'ASSIGNED', ':now': now },
+            },
+          })
+        }
+        await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
 
         // Notify CGM that admin accepted
         try {
@@ -130,16 +148,18 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             endTime: booking.endTime,
             confirmedAt: now,
             adminName: caller.name,
+            driverName,
+            driverMobile: booking.driverMobile || cab?.assignedDriverMobile || '',
           }).catch(() => {})
         } catch (_) { /* non-critical */ }
 
-        return successResponse({ bookingId, status: 'CONFIRMED', driverResponseStatus: 'ACCEPTED' })
+        return successResponse({ bookingId, status: 'CONFIRMED', driverResponseStatus: 'ACCEPTED', driverId, driverName })
       }
 
       // REJECT action — admin rejects an expired/pending booking
       if (action === 'REJECT') {
-        if (currentStatus !== 'BOOKING_PENDING') {
-          return errorResponse(`Cannot reject booking with status ${currentStatus}. Only BOOKING_PENDING bookings can be rejected.`, 409)
+        if (!['BOOKING_PENDING', 'EXPIRED'].includes(currentStatus)) {
+          return errorResponse(`Cannot reject booking with status ${currentStatus}.`, 409)
         }
 
         const lockPk = `CAB#${booking.cabId}#${booking.bookingDate}`
@@ -189,8 +209,74 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         return successResponse({ bookingId, status: 'REJECTED', driverResponseStatus: 'REJECTED' })
       }
 
+      if (action === 'REASSIGN') {
+        if (!cabId || cabId === booking.cabId) return errorResponse('A different cabId is required for reassignment')
+        if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(currentStatus)) {
+          return errorResponse(`Booking is already ${currentStatus} and cannot be reassigned`, 409)
+        }
+
+        const newCabResp = await dynamoDB.send(new GetCommand({
+          TableName: TABLE_NAMES.CABS,
+          Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' },
+        }))
+        const newCab = newCabResp.Item
+        if (!newCab || !['AVAILABLE', 'ASSIGNED'].includes(newCab.status)) {
+          return errorResponse('The selected cab is not available for reassignment', 409)
+        }
+
+        const cabBookings = await dynamoDB.send(new QueryCommand({
+          TableName: TABLE_NAMES.BOOKINGS,
+          IndexName: 'cab-slot-index',
+          KeyConditionExpression: 'cabId = :cabId AND begins_with(bookingDateSlot, :date)',
+          ExpressionAttributeValues: { ':cabId': cabId, ':date': `${booking.bookingDate}#` },
+        }))
+        if ((cabBookings.Items || []).some(item => item.bookingId !== bookingId)) {
+          return errorResponse('The selected cab already has a booking on this date', 409)
+        }
+
+        const oldLockPk = `CAB#${booking.cabId}#${booking.bookingDate}`
+        const newLockPk = `CAB#${cabId}#${booking.bookingDate}`
+        const lockTimes = booking.startTime && booking.endTime
+          ? intervalLockTimes({ startTime: booking.startTime, endTime: booking.endTime })
+          : []
+        const transactItems: any[] = [{
+          Update: {
+            TableName: TABLE_NAMES.BOOKINGS,
+            Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
+            UpdateExpression: 'SET cabId = :cabId, cabNumber = :cabNumber, driverId = :driverId, driverName = :driverName, updatedAt = :now, statusUpdatedBy = :admin, statusUpdatedAt = :now',
+            ExpressionAttributeValues: {
+              ':cabId': cabId, ':cabNumber': newCab.cabNumber,
+              ':driverId': newCab.assignedDriverId || 'UNASSIGNED',
+              ':driverName': newCab.assignedDriverName || 'Pending Assignment',
+              ':now': now, ':admin': 'ADMIN',
+            },
+          },
+        }, {
+          Update: {
+            TableName: TABLE_NAMES.CABS,
+            Key: { PK: `CAB#${booking.cabId}`, SK: 'DETAILS' },
+            UpdateExpression: 'SET #status = :available, updatedAt = :now',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: { ':available': 'AVAILABLE', ':now': now },
+          },
+        }, {
+          Update: {
+            TableName: TABLE_NAMES.CABS,
+            Key: { PK: `CAB#${cabId}`, SK: 'DETAILS' },
+            UpdateExpression: 'SET #status = :assigned, updatedAt = :now',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: { ':assigned': 'ASSIGNED', ':now': now },
+          },
+        },
+          ...lockTimes.map(t => ({ Delete: { TableName: TABLE_NAMES.SLOTS, Key: { PK: oldLockPk, SK: `LOCK#${t}` } } })),
+          ...lockTimes.map(t => ({ Put: { TableName: TABLE_NAMES.SLOTS, Item: { PK: newLockPk, SK: `LOCK#${t}`, bookingId, createdAt: now }, ConditionExpression: 'attribute_not_exists(PK)' } })),
+        ]
+        await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
+        return successResponse({ bookingId, status: currentStatus, cabId, cabNumber: newCab.cabNumber })
+      }
+
       // CANCEL and COMPLETE actions
-      const terminalStatuses = ['COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
+      const terminalStatuses = ['COMPLETED', 'CANCELLED', 'REJECTED']
       if (terminalStatuses.includes(currentStatus)) {
         return errorResponse(`Booking is already ${currentStatus} and cannot be changed`, 409)
       }
@@ -239,21 +325,27 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
         await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
       } else {
-        // Force complete: update booking + make cab available
-        await dynamoDB.send(new UpdateCommand({
-          TableName: TABLE_NAMES.BOOKINGS,
-          Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, completedAt = :now, updatedAt = :now',
-          ExpressionAttributeNames: { '#st': 'status' },
-          ExpressionAttributeValues: { ':status': 'COMPLETED', ':admin': 'ADMIN', ':now': now },
-        }))
-        await dynamoDB.send(new UpdateCommand({
-          TableName: TABLE_NAMES.CABS,
-          Key: { PK: `CAB#${booking.cabId}`, SK: 'DETAILS' },
-          UpdateExpression: 'SET #status = :available, updatedAt = :now REMOVE assignedDriverId, assignedDriverName',
-          ExpressionAttributeNames: { '#status': 'status' },
-          ExpressionAttributeValues: { ':available': 'AVAILABLE', ':now': now },
-        }))
+        // Force complete atomically, but preserve the cab's permanent driver assignment.
+        await dynamoDB.send(new TransactWriteCommand({ TransactItems: [
+          {
+            Update: {
+              TableName: TABLE_NAMES.BOOKINGS,
+              Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
+              UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, completedAt = :now, updatedAt = :now',
+              ExpressionAttributeNames: { '#st': 'status' },
+              ExpressionAttributeValues: { ':status': 'COMPLETED', ':admin': 'ADMIN', ':now': now },
+            },
+          },
+          {
+            Update: {
+              TableName: TABLE_NAMES.CABS,
+              Key: { PK: `CAB#${booking.cabId}`, SK: 'DETAILS' },
+              UpdateExpression: 'SET #status = :available, updatedAt = :now',
+              ExpressionAttributeNames: { '#status': 'status' },
+              ExpressionAttributeValues: { ':available': 'AVAILABLE', ':now': now },
+            },
+          },
+        ] }))
       }
 
       // Notify CGM and driver (non-blocking)

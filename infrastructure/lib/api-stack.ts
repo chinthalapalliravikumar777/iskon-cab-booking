@@ -52,6 +52,7 @@ export class ApiStack extends cdk.Stack {
       USER_POOL_ID:       userPool.userPoolId,
       COGNITO_USER_POOL_ID: userPool.userPoolId,
       COGNITO_CLIENT_ID:  userPoolClient.userPoolClientId,
+      FIREBASE_SERVICE_ACCOUNT_JSON: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '',
     }
 
     // ── Helper: create Lambda + log group ────────────────────────────────────
@@ -92,6 +93,7 @@ export class ApiStack extends cdk.Stack {
     const getMyBookingsFn     = createLambda('GetMyBookings',     'functions/cgm/getMyBookings.handler')
     const updateTripStatusFn  = createLambda('UpdateTripStatus',  'functions/driver/updateTripStatus.handler')
     const getMyTripsFn        = createLambda('GetMyTrips',        'functions/driver/getMyTrips.handler')
+    const getMyCabFn          = createLambda('GetMyCab',          'functions/driver/getMyCab.handler')
     const respondBookingFn    = createLambda('RespondBooking',    'functions/driver/respondBooking.handler')
     const releaseCabFn        = createLambda('ReleaseCab',        'functions/admin/releaseCab.handler')
     const createUserFn        = createLambda('CreateUser',        'functions/admin/createUser.handler')
@@ -105,6 +107,7 @@ export class ApiStack extends cdk.Stack {
     const seedFn              = createLambda('SeedProjects',      'functions/admin/seedHandler.handler')
     const getNotificationsFn  = createLambda('GetNotifications',  'functions/notifications/getNotifications.handler')
     const markReadFn          = createLambda('MarkNotifRead',     'functions/notifications/markRead.handler')
+    const registerPushTokenFn = createLambda('RegisterPushToken', 'functions/notifications/registerPushToken.handler')
     const expireBookingsFn    = createLambda('ExpireBookings',    'functions/scheduler/expireBookings.handler')
 
     // ── WebSocket Lambdas ─────────────────────────────────────────────────────
@@ -158,6 +161,7 @@ export class ApiStack extends cdk.Stack {
     // Driver
     addRoute('/v1/driver/trips/{bookingId}/status', [apigateway.HttpMethod.PATCH], updateTripStatusFn,  'UpdateTripStatusI')
     addRoute('/v1/driver/trips',                    [apigateway.HttpMethod.GET],   getMyTripsFn,        'GetMyTripsI')
+    addRoute('/v1/driver/cab',                      [apigateway.HttpMethod.GET],   getMyCabFn,          'GetMyCabI')
     addRoute('/v1/driver/bookings/{bookingId}/decision', [apigateway.HttpMethod.PATCH], respondBookingFn, 'RespondBookingI')
 
     // Admin — cabs
@@ -180,7 +184,7 @@ export class ApiStack extends cdk.Stack {
 
     // Projects
     addRoute('/v1/projects',              [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST], projectsFn, 'ProjectsI')
-    addRoute('/v1/projects/{projectId}',  [apigateway.HttpMethod.PATCH],                           projectsFn, 'ProjectUpdateI')
+    addRoute('/v1/projects/{projectId}',  [apigateway.HttpMethod.PATCH, apigateway.HttpMethod.DELETE], projectsFn, 'ProjectUpdateI')
 
     // Profile photos
     addRoute('/v1/profile-photos/{userId}', [apigateway.HttpMethod.GET, apigateway.HttpMethod.PUT], profilePhotosFn, 'ProfilePhotosI')
@@ -188,6 +192,7 @@ export class ApiStack extends cdk.Stack {
     // Notifications
     addRoute('/v1/notifications',                       [apigateway.HttpMethod.GET],   getNotificationsFn, 'GetNotifsI')
     addRoute('/v1/notifications/{notificationId}/read', [apigateway.HttpMethod.PATCH], markReadFn,         'MarkReadI')
+    addRoute('/v1/notifications/push-token',             [apigateway.HttpMethod.POST],  registerPushTokenFn, 'RegisterPushTokenI')
 
     // ── EventBridge scheduler ─────────────────────────────────────────────────
     new events.Rule(this, 'ExpireBookingsSchedule', {

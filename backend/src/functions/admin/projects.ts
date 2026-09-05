@@ -46,7 +46,16 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const existing = await dynamoDB.send(new GetCommand({ TableName: TABLE_NAMES.PROJECTS, Key: { PK: `PROJECT#${projectId}`, SK: 'DETAILS' } }))
       if (!existing.Item) return errorResponse('Project not found', 404)
 
-      // Delete the project — it remains in historical booking records
+      const bookingReferences = await dynamoDB.send(new ScanCommand({
+        TableName: TABLE_NAMES.BOOKINGS,
+        FilterExpression: 'projectId = :projectId',
+        ExpressionAttributeValues: { ':projectId': projectId },
+        ProjectionExpression: 'bookingId',
+      }))
+      if ((bookingReferences.Items || []).length > 0) {
+        return errorResponse('This project cannot be deleted because it is referenced by booking history. Deactivate it instead.', 409)
+      }
+
       await dynamoDB.send(new DeleteCommand({ TableName: TABLE_NAMES.PROJECTS, Key: { PK: `PROJECT#${projectId}`, SK: 'DETAILS' } }))
       return successResponse({ projectId, deleted: true })
     }

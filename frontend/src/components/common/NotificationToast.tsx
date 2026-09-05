@@ -5,6 +5,7 @@ export interface ToastMessage {
   type: string
   text: string
   at: number
+  payload?: Record<string, unknown>
 }
 
 interface Props {
@@ -18,6 +19,7 @@ const TYPE_ICON: Record<string, string> = {
   DRIVER_ARRIVED:    '📍',
   TRIP_COMPLETED:    '🎉',
   BOOKING_REQUEST:   '🔔',
+  BOOKING_CONFIRMED: '✅',
   BOOKING_EXPIRED:   '⏰',
   BOOKING_CANCELLED_ADMIN: '🚫',
   BOOKING_COMPLETED_ADMIN: '✅',
@@ -29,6 +31,7 @@ const TYPE_TEXT: Record<string, string> = {
   DRIVER_ARRIVED:    'Your cab has arrived at the site',
   TRIP_COMPLETED:    'Your site visit trip has been completed',
   BOOKING_REQUEST:   'New booking request received',
+  BOOKING_CONFIRMED: 'Your cab booking is confirmed',
   BOOKING_EXPIRED:   'A booking has expired — driver did not respond',
   BOOKING_CANCELLED_ADMIN: 'A booking was cancelled by admin',
   BOOKING_COMPLETED_ADMIN: 'A booking was marked complete by admin',
@@ -42,6 +45,16 @@ function Toast({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: stri
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [toast.id, onDismiss])
 
+  const payload = toast.payload || {}
+  const isBookingRequest = toast.type === 'BOOKING_REQUEST'
+  const isBookingConfirmed = toast.type === 'BOOKING_CONFIRMED'
+  const contactName = String(payload.cgmName || payload.driverName || '')
+  const contactMobile = String(payload.cgmMobile || payload.driverMobile || '')
+  const bookingDate = String(payload.bookingDate || '')
+  const startTime = String(payload.startTime || '')
+  const endTime = String(payload.endTime || '')
+  const cabNumber = String(payload.cabNumber || '')
+
   return (
     <div className="flex items-start gap-3 bg-white border border-gray-200 shadow-lg rounded-2xl px-4 py-3 min-w-[280px] max-w-sm animate-slide-in">
       <span className="text-2xl flex-shrink-0">{TYPE_ICON[toast.type] || '🔔'}</span>
@@ -49,6 +62,13 @@ function Toast({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: stri
         <p className="text-sm font-semibold text-gray-900 leading-tight">
           {TYPE_TEXT[toast.type] || toast.text}
         </p>
+        {(isBookingRequest || isBookingConfirmed) && (
+          <div className="mt-1.5 space-y-0.5 text-xs text-gray-500">
+            {bookingDate && <p>{bookingDate}{startTime && endTime ? ` · ${startTime}–${endTime}` : ''}{cabNumber ? ` · ${cabNumber}` : ''}</p>}
+            {contactName && <p>{isBookingRequest ? 'CGM' : 'Driver'}: {contactName}</p>}
+            {contactMobile && <a className="inline-flex font-semibold text-blue-700 hover:text-blue-900" href={`tel:${contactMobile}`}>Call {isBookingRequest ? 'CGM' : 'driver'}: {contactMobile}</a>}
+          </div>
+        )}
       </div>
       <button
         onClick={() => onDismiss(toast.id)}

@@ -66,6 +66,22 @@ export default function AdminProjects() {
     }
   }
 
+  const deleteProject = async (project: Project) => {
+    if (!window.confirm(`Delete ${project.projectName}? Projects used by booking history cannot be deleted.`)) return
+    setLoading(true)
+    setMessage('')
+    setError('')
+    try {
+      await apiClient.delete(`/v1/projects/${encodeURIComponent(project.projectId)}`)
+      setMessage(`${project.projectName} deleted.`)
+      await loadProjects()
+    } catch (requestError: any) {
+      setError(requestError.response?.data?.error || 'Could not delete project.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const visibleProjects = filter === 'ALL' ? projects : projects.filter(project => project.status === filter)
 
   return (
@@ -97,7 +113,7 @@ export default function AdminProjects() {
 
         <section className="card">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-5"><div><p className="section-title">Project directory</p><p className="section-subtitle">{visibleProjects.length} project{visibleProjects.length === 1 ? '' : 's'} shown</p></div><div className="flex gap-1 rounded-xl bg-gray-100 p-1">{(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(option => <button key={option} type="button" onClick={() => setFilter(option)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${filter === option ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}`}>{option === 'ALL' ? 'All' : option === 'ACTIVE' ? 'Active' : 'Inactive'}</button>)}</div></div>
-          {visibleProjects.length === 0 ? <div className="py-14 text-center text-sm text-gray-400">No projects found.</div> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{visibleProjects.map(project => <article key={project.projectId} className="rounded-xl border border-gray-100 p-4 hover:border-blue-200 hover:shadow-sm transition-all"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-gray-900">{project.projectName}</h3><p className="mt-1 text-sm text-gray-500">{project.location}</p></div><span className={project.status === 'ACTIVE' ? 'badge-available' : 'badge-completed'}>{project.status}</span></div>{project.description && <p className="mt-3 text-xs leading-5 text-gray-400">{project.description}</p>}<div className="mt-4 flex gap-3 border-t border-gray-50 pt-3"><button type="button" onClick={() => { setEditingId(project.projectId); setForm({ projectName: project.projectName, location: project.location, description: project.description || '' }) }} className="text-xs font-semibold text-blue-700">Edit</button><button type="button" disabled={loading} onClick={() => void toggleProject(project)} className="text-xs font-semibold text-gray-500">{project.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button></div></article>)}</div>}
+          {visibleProjects.length === 0 ? <div className="py-14 text-center text-sm text-gray-400">No projects found.</div> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{visibleProjects.map(project => <article key={project.projectId} className="rounded-xl border border-gray-100 p-4 hover:border-blue-200 hover:shadow-sm transition-all"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-gray-900">{project.projectName}</h3><p className="mt-1 text-sm text-gray-500">{project.location}</p></div><span className={project.status === 'ACTIVE' ? 'badge-available' : 'badge-completed'}>{project.status}</span></div>{project.description && <p className="mt-3 text-xs leading-5 text-gray-400">{project.description}</p>}<div className="mt-4 flex gap-3 border-t border-gray-50 pt-3"><button type="button" onClick={() => { setEditingId(project.projectId); setForm({ projectName: project.projectName, location: project.location, description: project.description || '' }) }} className="text-xs font-semibold text-blue-700">Edit</button><button type="button" disabled={loading} onClick={() => void toggleProject(project)} className="text-xs font-semibold text-gray-500">{project.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button><button type="button" disabled={loading} onClick={() => void deleteProject(project)} className="text-xs font-semibold text-red-600">Delete</button></div></article>)}</div>}
         </section>
       </div>
     </AppLayout>

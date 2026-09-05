@@ -4,6 +4,7 @@ import apiClient from '../../api/client'
 
 interface Booking {
   bookingId: string
+  cabId: string
   cgmName: string
   cgmMobile?: string
   driverName: string
@@ -21,6 +22,14 @@ interface Booking {
   createdAt: string
   pickupDetails?: string
   cancelReason?: string
+}
+
+interface Cab {
+  cabId: string
+  cabNumber: string
+  vehicleModel?: string
+  registrationNumber?: string
+  status: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -43,6 +52,7 @@ export default function AdminBookings() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [cabs, setCabs] = useState<Cab[]>([])
 
   // Filters
   const [filterDate, setFilterDate] = useState('')
@@ -50,8 +60,9 @@ export default function AdminBookings() {
   const [search, setSearch] = useState('')
 
   // Action modal
-  const [actionModal, setActionModal] = useState<{ booking: Booking; action: 'CANCEL' | 'COMPLETE' | 'ACCEPT' | 'REJECT' } | null>(null)
+  const [actionModal, setActionModal] = useState<{ booking: Booking; action: 'CANCEL' | 'COMPLETE' | 'ACCEPT' | 'REJECT' | 'REASSIGN' } | null>(null)
   const [actionReason, setActionReason] = useState('')
+  const [reassignCabId, setReassignCabId] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
   const load = async () => {
@@ -69,7 +80,10 @@ export default function AdminBookings() {
     }
   }
 
-  useEffect(() => { void load() }, [filterDate, filterStatus])
+  useEffect(() => {
+    void load()
+    apiClient.get('/v1/admin/cabs').then(response => setCabs(response.data.data || [])).catch(() => {})
+  }, [filterDate, filterStatus])
 
   useEffect(() => {
     const q = search.toLowerCase()
@@ -94,23 +108,26 @@ export default function AdminBookings() {
       await apiClient.patch(`/v1/admin/bookings/${encodeURIComponent(actionModal.booking.bookingId)}`, {
         action: actionModal.action,
         reason: actionReason,
+        cabId: actionModal.action === 'REASSIGN' ? reassignCabId : undefined,
       })
       let newStatus: string
       if (actionModal.action === 'CANCEL') newStatus = 'CANCELLED'
       else if (actionModal.action === 'COMPLETE') newStatus = 'COMPLETED'
       else if (actionModal.action === 'ACCEPT') newStatus = 'CONFIRMED'
-      else newStatus = 'REJECTED'
+      else if (actionModal.action === 'REJECT') newStatus = 'REJECTED'
+      else newStatus = actionModal.booking.bookingStatus
       
       setBookings(prev =>
         prev.map(b =>
           b.bookingId === actionModal.booking.bookingId
-            ? { ...b, bookingStatus: newStatus, status: newStatus }
+            ? { ...b, bookingStatus: newStatus, status: newStatus, ...(actionModal.action === 'REASSIGN' ? { cabId: reassignCabId, cabNumber: cabs.find(c => c.cabId === reassignCabId)?.cabNumber } : {}) }
             : b
         )
       )
       setMessage(`Booking ${actionModal.action.toLowerCase()} successfully.`)
       setActionModal(null)
       setActionReason('')
+      setReassignCabId('')
     } catch (e: any) {
       setError(e?.response?.data?.error || 'Action failed.')
     } finally {
@@ -183,7 +200,7 @@ export default function AdminBookings() {
           <div className="space-y-3">
             {filtered.map(b => {
               const displayStatus = getDisplayStatus(b)
-              const isActive = ACTIVE_STATUSES.includes(displayStatus)
+              const isActive = ACTIVE_STATUSES.includes(displayStatus) || displayStatus === 'EXPIRED'
               return (
                 <div key={b.bookingId} className="rounded-xl border border-gray-100 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -206,8 +223,8 @@ export default function AdminBookings() {
                     </div>
                     {isActive && (
                       <div className="flex gap-2 flex-wrap flex-shrink-0">
-                        {/* Show ACCEPT/REJECT for PENDING driver response */}
-                        {(b.driverResponseStatus === 'PENDING' || b.bookingStatus === 'BOOKING_PENDING') && (
+                        {/* Show ACCEPT/REJECT for pending or timed-out driver response */}
+                        {(b.driverResponseStatus === 'PENDING' || b.driverResponseStatus === 'EXPIRED' || b.bookingStatus === 'BOOKING_PENDING' || b.bookingStatus === 'EXPIRED') && (
                           <>
                             <button
                               className="text-xs font-medium text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200"
@@ -223,9 +240,8 @@ export default function AdminBookings() {
                             </button>
                           </>
                         )}
-                        {/* Standard CANCEL/COMPLETE for active bookings */}
-                        {(!b.driverResponseStatus || b.driverResponseStatus !== 'PENDING') && (
-                          <>
+                        {/* Admin can cancel, complete, or reassign any non-terminal booking. */}
+                        <>
                             <button
                               className="text-xs font-medium text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200"
                               onClick={() => { setActionModal({ booking: b, action: 'CANCEL' }); setActionReason('') }}
@@ -238,8 +254,13 @@ export default function AdminBookings() {
                             >
                               Complete
                             </button>
-                          </>
-                        )}
+                            <button
+                              className="text-xs font-medium text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200"
+                              onClick={() => { setActionModal({ booking: b, action: 'REASSIGN' }); setActionReason(''); setReassignCabId('') }}
+                            >
+                              Reassign
+                            </button>
+                        </>
                       </div>
                     )}
                   </div>
@@ -259,12 +280,22 @@ export default function AdminBookings() {
               {actionModal.action === 'COMPLETE' && 'Force Complete Booking'}
               {actionModal.action === 'ACCEPT' && 'Accept Booking'}
               {actionModal.action === 'REJECT' && 'Reject Booking'}
+              {actionModal.action === 'REASSIGN' && 'Reassign Booking'}
             </h2>
             <p className="text-sm text-gray-500 mb-4">
               {actionModal.booking.projectName || actionModal.booking.siteLocation} —{' '}
               {actionModal.booking.bookingDate} · {actionModal.booking.startTime}–{actionModal.booking.endTime}
             </p>
 
+            {actionModal.action === 'REASSIGN' ? <>
+              <label className="input-label">New cab</label>
+              <select className="input-field mb-4" value={reassignCabId} onChange={e => setReassignCabId(e.target.value)}>
+                <option value="">Select a cab</option>
+                {cabs.filter(c => c.cabId !== actionModal.booking.cabId && ['AVAILABLE', 'ASSIGNED'].includes(c.status)).map(cab => (
+                  <option key={cab.cabId} value={cab.cabId}>{cab.cabNumber} — {cab.vehicleModel || 'Model not set'} ({cab.registrationNumber || 'Registration not set'})</option>
+                ))}
+              </select>
+            </> : <>
             <label className="input-label">
               {actionModal.action === 'ACCEPT' || actionModal.action === 'REJECT' ? 'Note (optional)' : 'Reason (optional)'}
             </label>
@@ -279,6 +310,7 @@ export default function AdminBookings() {
               value={actionReason}
               onChange={e => setActionReason(e.target.value)}
             />
+            </>}
 
             {error && <div className="alert-error mb-3">{error}</div>}
 
@@ -290,13 +322,14 @@ export default function AdminBookings() {
                   'btn-primary'
                 }`}
                 onClick={() => void executeAction()}
-                disabled={actionLoading}
+                disabled={actionLoading || (actionModal.action === 'REASSIGN' && !reassignCabId)}
               >
                 {actionLoading ? 'Processing...' : 
                   actionModal.action === 'CANCEL' ? 'Confirm Cancel' :
                   actionModal.action === 'COMPLETE' ? 'Force Complete' :
                   actionModal.action === 'ACCEPT' ? 'Confirm Accept' :
-                  'Confirm Reject'
+                  actionModal.action === 'REJECT' ? 'Confirm Reject' :
+                  'Confirm Reassign'
                 }
               </button>
               <button className="btn-secondary flex-1" onClick={() => setActionModal(null)}>

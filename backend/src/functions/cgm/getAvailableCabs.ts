@@ -7,7 +7,7 @@ import { errorResponse, successResponse, Responses } from '../../utils/response'
 /**
  * GET /cgm/cabs/available?date=YYYY-MM-DD&slot=HH:MM-HH:MM
  *
- * Returns cabs that are AVAILABLE and not yet booked for the requested date+slot.
+ * Returns available or assigned cabs that are not yet booked for the requested date+slot.
  * Only accessible by CGM role.
  */
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
@@ -23,12 +23,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const cabsResult = await dynamoDB.send(
       new ScanCommand({
         TableName: TABLE_NAMES.CABS,
-        FilterExpression: '#status = :available',
+        FilterExpression: '#status IN (:available, :assigned)',
         ExpressionAttributeNames: {
           '#status': 'status',
         },
         ExpressionAttributeValues: {
           ':available': 'AVAILABLE',
+          ':assigned': 'ASSIGNED',
         },
       })
     )
@@ -54,6 +55,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         results.push({
           cabId: cab.cabId,
           cabNumber: cab.cabNumber,
+          vehicleModel: cab.vehicleModel,
+          registrationNumber: cab.registrationNumber,
+          assignedDriverId: cab.assignedDriverId,
+          assignedDriverName: cab.assignedDriverName,
           status: cab.status,
           updatedAt: cab.updatedAt,
         })

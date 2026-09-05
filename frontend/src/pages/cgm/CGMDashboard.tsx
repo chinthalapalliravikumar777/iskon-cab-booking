@@ -78,7 +78,7 @@ export default function CGMDashboard() {
   // WebSocket — receive real-time trip status updates
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
     const id = `${Date.now()}-${Math.random()}`
-    setToasts(prev => [...prev, { id, type, text: type, at: Date.now() }])
+    setToasts(prev => [...prev, { id, type, text: type, at: Date.now(), payload }])
 
     // Refresh booking list when trip status changes
     const refreshTypes = ['DRIVER_ACCEPTED', 'DRIVER_ON_THE_WAY', 'DRIVER_ARRIVED', 'TRIP_COMPLETED', 'BOOKING_EXPIRED', 'BOOKING_CANCELLED_ADMIN']

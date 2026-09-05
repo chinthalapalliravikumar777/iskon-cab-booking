@@ -9,6 +9,8 @@ import {
 import type { APIGatewayProxyEvent } from 'aws-lambda'
 import { requireRole } from '../../utils/auth'
 import { errorResponse, successResponse } from '../../utils/response'
+import { ScanCommand } from '@aws-sdk/lib-dynamodb'
+import { dynamoDB, TABLE_NAMES } from '../../utils/dynamodb'
 
 const cognitoClient = new CognitoIdentityProviderClient({})
 
@@ -123,16 +125,29 @@ export async function listUsers(event: APIGatewayProxyEvent) {
       Limit: 60,
     }))
 
+    const cabsResult = await dynamoDB.send(new ScanCommand({ TableName: TABLE_NAMES.CABS }))
+    const assignedCabs = new Map(
+      (cabsResult.Items || [])
+        .filter(cab => cab.assignedDriverId)
+        .map(cab => [cab.assignedDriverId, cab])
+    )
+
     const users = (result.Users || []).map(user => {
       const attributes = Object.fromEntries((user.Attributes || []).map(attribute => [attribute.Name, attribute.Value || '']))
+      const userId = attributes.sub || user.Username || ''
+      const assignedCab = assignedCabs.get(userId) || assignedCabs.get(user.Username || '') || assignedCabs.get(attributes.email || '')
       return {
-        userId: user.Username,
+        userId,
         email: attributes.email || user.Username,
         name: attributes.name || '',
         mobile: attributes['custom:mobile'] || '',
         role: attributes['custom:role'] || '',
         status: user.UserStatus,
         enabled: user.Enabled,
+        assignedCabId: assignedCab?.cabId,
+        assignedCabNumber: assignedCab?.cabNumber,
+        assignedCabModel: assignedCab?.vehicleModel,
+        assignedCabRegistration: assignedCab?.registrationNumber,
       }
     }).filter(user => user.role === 'CGM' || user.role === 'DRIVER')
 

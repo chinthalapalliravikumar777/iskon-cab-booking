@@ -81,10 +81,8 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       nextStatus === 'ACCEPTED'  ? 'ASSIGNED' :
       'ON_TRIP'
 
-    // Build cab update expression: only REMOVE assignedDriver when COMPLETED
-    const cabUpdateExpr = nextStatus === 'COMPLETED'
-      ? 'SET #status = :status, updatedAt = :updatedAt REMOVE assignedDriverId, assignedDriverName'
-      : 'SET #status = :status, updatedAt = :updatedAt'
+    // Completing a trip releases the cab for booking but keeps its driver assignment.
+    const cabUpdateExpr = 'SET #status = :status, updatedAt = :updatedAt'
 
     // Atomically update both booking and cab in a single transaction
     await dynamoDB.send(

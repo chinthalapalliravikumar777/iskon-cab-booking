@@ -77,6 +77,12 @@ export default function DriverNotifications({ onRefresh }: Props) {
                   <strong>{p.bookingDate}</strong> · {p.startTime}–{p.endTime}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">Cab: {p.cabNumber}</p>
+                {p.cgmName && <p className="text-xs text-gray-500 mt-0.5">CGM: {p.cgmName}</p>}
+                {p.cgmMobile && (
+                  <a href={`tel:${p.cgmMobile}`} className="inline-flex text-xs font-semibold text-blue-700 hover:text-blue-900 mt-1">
+                    Call CGM: {p.cgmMobile}
+                  </a>
+                )}
                 {p.pickupDetails && <p className="text-xs text-gray-500 mt-0.5">📍 {p.pickupDetails}</p>}
                 {deadline && (
                   <p className={`text-xs mt-1 font-medium ${isExpired ? 'text-red-600' : 'text-yellow-700'}`}>

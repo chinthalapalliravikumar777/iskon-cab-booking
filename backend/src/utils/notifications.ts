@@ -1,5 +1,23 @@
-import { PutCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import { dynamoDB, TABLE_NAMES } from './dynamodb'
+import { cert, getApps, initializeApp, type App } from 'firebase-admin/app'
+import { getMessaging } from 'firebase-admin/messaging'
+
+let firebaseApp: App | null = null
+
+function getFirebaseApp(): App | null {
+  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+  if (!serviceAccount) return null
+  if (!firebaseApp) {
+    try {
+      firebaseApp = getApps()[0] || initializeApp({ credential: cert(JSON.parse(serviceAccount)) })
+    } catch (error) {
+      console.warn('FCM is not configured correctly', error)
+      return null
+    }
+  }
+  return firebaseApp
+}
 
 /**
  * Creates a notification record in DynamoDB and optionally pushes it
@@ -36,6 +54,43 @@ export async function createNotification(
   pushWs(userId, type, { ...payload, notificationId: sk, sentAt: now }).catch(err => {
     console.warn('WebSocket push failed (non-critical)', err)
   })
+  sendFcmPush(userId, type, payload).catch(err => {
+    console.warn('FCM push failed (non-critical)', err)
+  })
+}
+
+export async function sendFcmPush(userId: string, type: string, payload: Record<string, unknown>): Promise<void> {
+  const app = getFirebaseApp()
+  if (!app) return
+
+  const userResult = await dynamoDB.send(new GetCommand({
+    TableName: TABLE_NAMES.USERS,
+    Key: { PK: `USER#${userId}`, SK: 'PROFILE' },
+  }))
+  const tokens = Array.from(userResult.Item?.pushTokens || []) as string[]
+  if (tokens.length === 0) return
+
+  const contactName = String(payload.cgmName || payload.driverName || '')
+  const title = type === 'BOOKING_REQUEST'
+    ? 'New cab booking request'
+    : type === 'BOOKING_CONFIRMED'
+      ? 'Cab booking confirmed'
+      : 'ISKON Cab Booking'
+  const body = type === 'BOOKING_REQUEST'
+    ? `${contactName || 'A CGM'} booked ${payload.cabNumber || 'a cab'}. Please respond.`
+    : type === 'BOOKING_CONFIRMED'
+      ? `Driver ${contactName || ''} accepted your cab booking.`
+      : String(payload.message || type)
+  const data = Object.fromEntries(Object.entries({ type, ...payload }).map(([key, value]) => [key, String(value ?? '')]))
+
+  await Promise.allSettled(tokens.map(token => getMessaging(app).send({
+    token,
+    notification: { title, body },
+    data,
+    android: { notification: { sound: 'default' } },
+    apns: { payload: { aps: { sound: 'default' } } },
+    webpush: { notification: { title, body, icon: '/favicon.svg' } },
+  })))
 }
 
 async function pushWs(userId: string, type: string, payload: Record<string, unknown>): Promise<void> {

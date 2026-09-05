@@ -71,20 +71,10 @@ export default function DriverDashboard() {
   [])
 
   const loadCab = useCallback(() => {
-    // Get assigned cab from authenticated user's record
-    if (!user?.assignedCabId) {
-      setCab(null)
-      return Promise.resolve()
-    }
-    
-    return apiClient.get('/v1/admin/cabs')
-      .then(r => {
-        const cabs: CabDetails[] = r.data.data || []
-        const mine = cabs.find((c: any) => c.cabId === user.assignedCabId)
-        setCab(mine || null)
-      })
+    return apiClient.get('/v1/driver/cab')
+      .then(r => setCab(r.data.data || null))
       .catch(() => { /* no cab — non-critical */ })
-  }, [user?.assignedCabId])
+  }, [])
 
   useEffect(() => {
     Promise.all([loadTrips(), loadCab()])
@@ -94,7 +84,7 @@ export default function DriverDashboard() {
   // WebSocket — real-time booking request push
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
     const id = `${Date.now()}-${Math.random()}`
-    setToasts(prev => [...prev, { id, type, text: type, at: Date.now() }])
+    setToasts(prev => [...prev, { id, type, text: type, at: Date.now(), payload }])
     if (type === 'BOOKING_REQUEST' || type === 'BOOKING_CANCELLED_ADMIN') {
       void loadTrips()
     }
@@ -164,7 +154,7 @@ export default function DriverDashboard() {
           </div>
         ) : (
           <div>
-            <p className="text-white font-medium">No vehicle assigned</p>
+            <p className="text-white font-medium">No cab assigned</p>
             <p className="text-blue-200 text-sm mt-1">Contact admin to assign a cab to your account</p>
           </div>
         )}

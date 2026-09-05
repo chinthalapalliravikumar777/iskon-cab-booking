@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, NavLink } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useFcmPushNotifications } from '../../hooks/useFcmPushNotifications'
 import { logout as cognitoLogout } from '../../utils/cognito'
 import type { UserRole } from '../../types'
 import ProfileAvatar from '../common/ProfileAvatar'
@@ -52,6 +53,7 @@ const roleColors: Record<UserRole, string> = {
 
 export default function AppLayout({ children, title, subtitle }: AppLayoutProps) {
   const { user, logout: clearSession } = useAuth()
+  useFcmPushNotifications()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 

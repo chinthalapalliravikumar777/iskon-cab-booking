@@ -1,54 +1,39 @@
 import type { APIGatewayProxyResult } from 'aws-lambda'
 import { ScanCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import { dynamoDB, TABLE_NAMES } from '../../utils/dynamodb'
-import { intervalLockTimes } from '../../utils/bookingTime'
 
 /**
- * Scheduled Lambda to expire pending bookings whose confirmationDeadline has passed.
+ * Scheduled Lambda to expire driver response windows whose deadline has passed.
  * Runs frequently (e.g., every 1 minute) via EventBridge.
  */
 export async function handler(): Promise<APIGatewayProxyResult | void> {
   try {
     const now = new Date().toISOString()
 
-    // Scan for pending bookings whose deadline <= now. For production with many items,
-    // add a GSI to query by status and confirmationDeadline instead of scanning.
+    // Scan for pending driver responses whose deadline <= now. For production with many items,
+    // add a GSI to query by response status and deadline instead of scanning.
     const result = await dynamoDB.send(new ScanCommand({
       TableName: TABLE_NAMES.BOOKINGS,
-      // Check both field names for backward compatibility
-      FilterExpression: '(#status = :pending OR bookingStatus = :pending) AND confirmationDeadline <= :now',
-      ExpressionAttributeNames: { '#status': 'status' },
-      ExpressionAttributeValues: { ':pending': 'BOOKING_PENDING', ':now': now },
-      ProjectionExpression: 'PK, SK, bookingId, cgmId, cabId, cabNumber, bookingDate, startTime, endTime',
+      FilterExpression: 'driverResponseStatus = :pending AND driverResponseDeadline <= :now',
+      ExpressionAttributeValues: { ':pending': 'PENDING', ':now': now },
+      ProjectionExpression: 'PK, SK, bookingId, cgmId, cabId, cabNumber, bookingDate, startTime, endTime, driverResponseStatus, driverResponseDeadline',
     }))
 
     const items = result.Items || []
     for (const booking of items) {
       try {
         const bookingId = booking.bookingId
-        const lockPk = `CAB#${booking.cabId}#${booking.bookingDate}`
-        const lockTimes = intervalLockTimes({ startTime: booking.startTime, endTime: booking.endTime })
-
         const transactItems: any[] = []
         transactItems.push({
           Update: {
             TableName: TABLE_NAMES.BOOKINGS,
             Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-            UpdateExpression: 'SET #status = :expired, expiredAt = :now, updatedAt = :now',
-            ConditionExpression: '#status = :pending AND confirmationDeadline <= :now',
+            UpdateExpression: 'SET driverResponseStatus = :expired, statusUpdatedBy = :system, statusUpdatedAt = :now, updatedAt = :now',
+            ConditionExpression: 'driverResponseStatus = :pending AND driverResponseDeadline <= :now AND (bookingStatus = :bookingPending OR #status = :bookingPending)',
             ExpressionAttributeNames: { '#status': 'status' },
-            ExpressionAttributeValues: { ':expired': 'EXPIRED', ':pending': 'BOOKING_PENDING', ':now': now },
+            ExpressionAttributeValues: { ':expired': 'EXPIRED', ':pending': 'PENDING', ':bookingPending': 'BOOKING_PENDING', ':system': 'SYSTEM', ':now': now },
           },
         })
-
-        for (const t of lockTimes) {
-          transactItems.push({
-            Delete: {
-              TableName: TABLE_NAMES.SLOTS,
-              Key: { PK: lockPk, SK: `LOCK#${t}` },
-            },
-          })
-        }
 
         await dynamoDB.send(new TransactWriteCommand({ TransactItems: transactItems }))
         try {

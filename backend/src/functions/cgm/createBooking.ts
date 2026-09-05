@@ -53,6 +53,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return errorResponse('Cab is not currently available for booking', 409)
     }
 
+    let driverMobile = ''
+    if (cab.assignedDriverId) {
+      const driverResult = await dynamoDB.send(new GetCommand({
+        TableName: TABLE_NAMES.USERS,
+        Key: { PK: `USER#${cab.assignedDriverId}`, SK: 'PROFILE' },
+      }))
+      driverMobile = cab.assignedDriverMobile || driverResult.Item?.mobile || ''
+    }
+
     let project: Record<string, any> | undefined
     if (projectId) {
       const projectResult = await dynamoDB.send(new GetCommand({
@@ -99,12 +108,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             ConditionCheck: {
               TableName: TABLE_NAMES.CABS,
               Key: { PK: cabKey, SK: 'DETAILS' },
-              ConditionExpression: '#status = :available',
+              ConditionExpression: '#status = :available OR #status = :assigned',
               ExpressionAttributeNames: {
                 '#status': 'status',
               },
               ExpressionAttributeValues: {
                 ':available': 'AVAILABLE',
+                ':assigned': 'ASSIGNED',
               },
             },
           },
@@ -120,9 +130,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 cgmMobile: caller.mobile || '',
                 cabId,
                 cabNumber: cab.cabNumber,
-                driverId: 'UNASSIGNED',
-                driverName: 'Pending Assignment',
-                driverMobile: '',
+                driverId: cab.assignedDriverId || 'UNASSIGNED',
+                driverName: cab.assignedDriverName || 'Pending Assignment',
+                driverMobile,
                 siteLocation,
                 projectId: project?.projectId || projectId,
                 projectName: project?.projectName || body.projectName,
@@ -165,11 +175,14 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           bookingId,
           cabId,
           cabNumber: cab.cabNumber,
+          cgmName: caller.name,
+          cgmMobile: caller.mobile || '',
           bookingDate,
           startTime,
           endTime,
           confirmationDeadline,
           pickupDetails: pickupDetails?.trim() || '',
+          projectName: project?.projectName || body.projectName || '',
         })
       }
     } catch (err) {

@@ -25,6 +25,7 @@ cdk.out/
 # AWS credentials - NEVER commit these
 .aws/
 aws-exports.js
+*firebase-adminsdk*.json
 
 # Logs
 npm-debug.log*

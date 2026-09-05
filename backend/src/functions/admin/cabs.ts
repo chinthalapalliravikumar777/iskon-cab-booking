@@ -22,7 +22,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
   }
 
-  let body: { cabNumber?: string; vehicleModel?: string; registrationNumber?: string; vehicleDetails?: string; status?: string; assignedDriverId?: string; assignedDriverName?: string }
+  let body: { cabNumber?: string; vehicleModel?: string; registrationNumber?: string; vehicleDetails?: string; status?: string; assignedDriverId?: string; assignedDriverName?: string; assignedDriverMobile?: string }
   try { body = JSON.parse(event.body || '{}') } catch { return errorResponse('Invalid request body') }
   const cabId = event.pathParameters?.cabId
 
@@ -30,7 +30,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!body.cabNumber?.trim() || !body.vehicleModel?.trim() || !body.registrationNumber?.trim()) return errorResponse('Cab number, vehicle model, and registration number are required')
     const newCabId = randomUUID()
     const now = new Date().toISOString()
-    const cab = { PK: `CAB#${newCabId}`, SK: 'DETAILS', cabId: newCabId, cabNumber: body.cabNumber.trim(), vehicleModel: body.vehicleModel.trim(), registrationNumber: body.registrationNumber.trim(), vehicleDetails: body.vehicleDetails?.trim() || '', status: body.status || 'AVAILABLE', assignedDriverId: body.assignedDriverId, assignedDriverName: body.assignedDriverName, updatedAt: now }
+    const cab = { PK: `CAB#${newCabId}`, SK: 'DETAILS', cabId: newCabId, cabNumber: body.cabNumber.trim(), vehicleModel: body.vehicleModel.trim(), registrationNumber: body.registrationNumber.trim(), vehicleDetails: body.vehicleDetails?.trim() || '', status: body.status || 'AVAILABLE', assignedDriverId: body.assignedDriverId, assignedDriverName: body.assignedDriverName, assignedDriverMobile: body.assignedDriverMobile, updatedAt: now }
     if (!CAB_STATUSES.includes(cab.status)) return errorResponse(`Status must be one of: ${CAB_STATUSES.join(', ')}`)
     try {
       await ensureDriverAvailable(body.assignedDriverId, newCabId)
@@ -63,7 +63,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const names: Record<string, string> = {}
     const values: Record<string, unknown> = { ':updatedAt': now }
     const updates = ['updatedAt = :updatedAt']
-    const fields = ['cabNumber', 'vehicleModel', 'registrationNumber', 'vehicleDetails', 'status', 'assignedDriverId', 'assignedDriverName'] as const
+    const fields = ['cabNumber', 'vehicleModel', 'registrationNumber', 'vehicleDetails', 'status', 'assignedDriverId', 'assignedDriverName', 'assignedDriverMobile'] as const
     for (const field of fields) {
       if (body[field] !== undefined) { updates.push(`#${field} = :${field}`); names[`#${field}`] = field; values[`:${field}`] = body[field] || null }
     }

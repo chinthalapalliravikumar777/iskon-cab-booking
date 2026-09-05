@@ -12,6 +12,8 @@ interface Driver {
   enabled: boolean
   assignedCabId?: string
   assignedCabNumber?: string
+  assignedCabModel?: string
+  assignedCabRegistration?: string
 }
 
 interface Cab {
@@ -22,6 +24,7 @@ interface Cab {
   status: string
   assignedDriverId?: string
   assignedDriverName?: string
+  assignedDriverMobile?: string
 }
 
 const statusBadge = (enabled: boolean) =>
@@ -93,13 +96,24 @@ export default function AdminDrivers() {
         await apiClient.patch(`/v1/admin/cabs/${encodeURIComponent(assignCabId)}`, {
           assignedDriverId: assignModal.userId,
           assignedDriverName: assignModal.name,
+          assignedDriverMobile: assignModal.mobile,
         })
         setCabs(prev => prev.map(c =>
           c.cabId === assignCabId
-            ? { ...c, assignedDriverId: assignModal.userId, assignedDriverName: assignModal.name }
+            ? { ...c, assignedDriverId: assignModal.userId, assignedDriverName: assignModal.name, assignedDriverMobile: assignModal.mobile }
             : c.assignedDriverId === assignModal.userId
             ? { ...c, assignedDriverId: undefined, assignedDriverName: undefined }
             : c
+        ))
+        setDrivers(prev => prev.map(driver => driver.userId === assignModal.userId
+          ? {
+              ...driver,
+              assignedCabId: cab?.cabId,
+              assignedCabNumber: cab?.cabNumber,
+              assignedCabModel: cab?.vehicleModel,
+              assignedCabRegistration: cab?.registrationNumber,
+            }
+          : driver
         ))
         setMessage(`${assignModal.name} assigned to ${cab?.cabNumber}.`)
       } else {
@@ -113,6 +127,10 @@ export default function AdminDrivers() {
             c.cabId === currentCab.cabId
               ? { ...c, assignedDriverId: undefined, assignedDriverName: undefined, status: 'AVAILABLE' }
               : c
+          ))
+          setDrivers(prev => prev.map(driver => driver.userId === assignModal.userId
+            ? { ...driver, assignedCabId: undefined, assignedCabNumber: undefined, assignedCabModel: undefined, assignedCabRegistration: undefined }
+            : driver
           ))
         }
         setMessage(`${assignModal.name} unassigned from cab.`)
@@ -185,9 +203,13 @@ export default function AdminDrivers() {
                     <td className="py-3 pr-4 text-gray-600">{driver.mobile || '—'}</td>
                     <td className="py-3 pr-4">
                       {driver.assignedCabId ? (
-                        <span className="font-medium text-blue-700">{driver.assignedCabNumber}</span>
+                        <div>
+                          <p className="font-medium text-blue-700">{driver.assignedCabNumber}</p>
+                          <p className="text-xs text-gray-500">{driver.assignedCabModel || 'Model not set'}</p>
+                          <p className="text-xs text-gray-400">{driver.assignedCabRegistration || 'Registration not set'}</p>
+                        </div>
                       ) : (
-                        <span className="text-gray-400">Not assigned</span>
+                        <span className="text-gray-400">No cab assigned</span>
                       )}
                     </td>
                     <td className="py-3 pr-4">
