@@ -125,11 +125,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           Update: {
             TableName: TABLE_NAMES.BOOKINGS,
             Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-            UpdateExpression: 'SET bookingStatus = :confirmed, #st = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, respondedBy = :admin, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, driverId = :driverId, driverName = :driverName',
+            UpdateExpression: 'SET bookingStatus = :confirmed, #st = :confirmed, driverResponseStatus = :accepted, driverResponseAt = :now, respondedBy = :admin, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, driverId = :driverId, driverName = :driverName, auditHistory = list_append(if_not_exists(auditHistory, :emptyAudit), :audit)',
             ExpressionAttributeNames: { '#st': 'status' },
             ExpressionAttributeValues: {
               ':confirmed': 'CONFIRMED', ':accepted': 'ACCEPTED', ':admin': 'ADMIN', ':now': now,
               ':driverId': driverId || 'UNASSIGNED', ':driverName': driverName || 'Pending Assignment',
+              ':audit': [{ action: 'ACCEPT', previousStatus: currentStatus, newStatus: 'CONFIRMED', actor: 'ADMIN', actorId: caller.userId, timestamp: now }],
+              ':emptyAudit': [],
             },
           },
         }]
@@ -193,7 +195,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             Update: {
               TableName: TABLE_NAMES.BOOKINGS,
               Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-              UpdateExpression: 'SET bookingStatus = :rejected, #st = :rejected, driverResponseStatus = :rejected_response, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, rejectionReason = :reason',
+              UpdateExpression: 'SET bookingStatus = :rejected, #st = :rejected, driverResponseStatus = :rejected_response, respondedBy = :admin, statusUpdatedBy = :admin, statusUpdatedAt = :now, updatedAt = :now, rejectionReason = :reason, auditHistory = list_append(if_not_exists(auditHistory, :emptyAudit), :audit)',
               ExpressionAttributeNames: { '#st': 'status' },
               ExpressionAttributeValues: {
                 ':rejected': 'REJECTED',
@@ -201,6 +203,8 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
                 ':admin': 'ADMIN',
                 ':now': now,
                 ':reason': reason || 'Rejected by admin',
+                ':audit': [{ action: 'REJECT', previousStatus: currentStatus, newStatus: 'REJECTED', actor: 'ADMIN', actorId: caller.userId, timestamp: now, reason: reason || 'Rejected by admin' }],
+                ':emptyAudit': [],
               },
             },
           },
@@ -277,12 +281,14 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           Update: {
             TableName: TABLE_NAMES.BOOKINGS,
             Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-            UpdateExpression: 'SET cabId = :cabId, cabNumber = :cabNumber, driverId = :driverId, driverName = :driverName, updatedAt = :now, statusUpdatedBy = :admin, statusUpdatedAt = :now',
+            UpdateExpression: 'SET cabId = :cabId, cabNumber = :cabNumber, driverId = :driverId, driverName = :driverName, updatedAt = :now, statusUpdatedBy = :admin, statusUpdatedAt = :now, auditHistory = list_append(if_not_exists(auditHistory, :emptyAudit), :audit)',
             ExpressionAttributeValues: {
               ':cabId': cabId, ':cabNumber': newCab.cabNumber,
               ':driverId': newCab.assignedDriverId || 'UNASSIGNED',
               ':driverName': newCab.assignedDriverName || 'Pending Assignment',
               ':now': now, ':admin': 'ADMIN',
+              ':audit': [{ action: 'REASSIGN', previousStatus: currentStatus, newStatus: currentStatus, actor: 'ADMIN', actorId: caller.userId, timestamp: now, previousCabId: booking.cabId, newCabId: cabId }],
+              ':emptyAudit': [],
             },
           },
         }, {
@@ -329,13 +335,15 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             Update: {
               TableName: TABLE_NAMES.BOOKINGS,
               Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-              UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, cancelledAt = :now, updatedAt = :now, cancelReason = :reason',
+              UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, cancelledAt = :now, cancelledBy = :admin, updatedAt = :now, cancelReason = :reason, auditHistory = list_append(if_not_exists(auditHistory, :emptyAudit), :audit)',
               ExpressionAttributeNames: { '#st': 'status' },
               ExpressionAttributeValues: {
                 ':status': 'CANCELLED',
                 ':admin': 'ADMIN',
                 ':now': now,
                 ':reason': reason || 'Cancelled by admin',
+                ':audit': [{ action: 'CANCEL', previousStatus: currentStatus, newStatus: 'CANCELLED', actor: 'ADMIN', actorId: caller.userId, timestamp: now, reason: reason || 'Cancelled by admin' }],
+                ':emptyAudit': [],
               },
             },
           },
@@ -365,9 +373,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             Update: {
               TableName: TABLE_NAMES.BOOKINGS,
               Key: { PK: `BOOKING#${bookingId}`, SK: 'DETAILS' },
-              UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, completedAt = :now, updatedAt = :now',
+              UpdateExpression: 'SET bookingStatus = :status, #st = :status, statusUpdatedBy = :admin, statusUpdatedAt = :now, completedAt = :now, completedBy = :admin, updatedAt = :now, auditHistory = list_append(if_not_exists(auditHistory, :emptyAudit), :audit)',
               ExpressionAttributeNames: { '#st': 'status' },
-              ExpressionAttributeValues: { ':status': 'COMPLETED', ':admin': 'ADMIN', ':now': now },
+              ExpressionAttributeValues: { ':status': 'COMPLETED', ':admin': 'ADMIN', ':now': now, ':audit': [{ action: 'COMPLETE', previousStatus: currentStatus, newStatus: 'COMPLETED', actor: 'ADMIN', actorId: caller.userId, timestamp: now }], ':emptyAudit': [] },
             },
           },
           {

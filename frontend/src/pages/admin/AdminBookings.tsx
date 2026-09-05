@@ -64,6 +64,7 @@ export default function AdminBookings() {
   const [actionReason, setActionReason] = useState('')
   const [reassignCabId, setReassignCabId] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [detailsBooking, setDetailsBooking] = useState<Booking | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -202,7 +203,7 @@ export default function AdminBookings() {
               const displayStatus = getDisplayStatus(b)
               const isActive = ACTIVE_STATUSES.includes(displayStatus) || displayStatus === 'EXPIRED'
               return (
-                <div key={b.bookingId} className="rounded-xl border border-gray-100 p-4">
+                <div key={b.bookingId} className="rounded-xl border border-gray-100 p-4 cursor-pointer" onClick={() => setDetailsBooking(b)}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -232,13 +233,13 @@ export default function AdminBookings() {
                           <>
                             <button
                               className="text-xs font-medium text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200"
-                              onClick={() => { setActionModal({ booking: b, action: 'ACCEPT' }); setActionReason('') }}
+                              onClick={event => { event.stopPropagation(); setActionModal({ booking: b, action: 'ACCEPT' }); setActionReason('') }}
                             >
                               Accept
                             </button>
                             <button
                               className="text-xs font-medium text-orange-600 hover:bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200"
-                              onClick={() => { setActionModal({ booking: b, action: 'REJECT' }); setActionReason('') }}
+                              onClick={event => { event.stopPropagation(); setActionModal({ booking: b, action: 'REJECT' }); setActionReason('') }}
                             >
                               Reject
                             </button>
@@ -248,19 +249,19 @@ export default function AdminBookings() {
                         <>
                             <button
                               className="text-xs font-medium text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200"
-                              onClick={() => { setActionModal({ booking: b, action: 'CANCEL' }); setActionReason('') }}
+                              onClick={event => { event.stopPropagation(); setActionModal({ booking: b, action: 'CANCEL' }); setActionReason('') }}
                             >
                               Cancel
                             </button>
                             <button
                               className="text-xs font-medium text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200"
-                              onClick={() => { setActionModal({ booking: b, action: 'COMPLETE' }); setActionReason('') }}
+                              onClick={event => { event.stopPropagation(); setActionModal({ booking: b, action: 'COMPLETE' }); setActionReason('') }}
                             >
                               Complete
                             </button>
                             <button
                               className="text-xs font-medium text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200"
-                              onClick={() => { setActionModal({ booking: b, action: 'REASSIGN' }); setActionReason(''); setReassignCabId('') }}
+                              onClick={event => { event.stopPropagation(); setActionModal({ booking: b, action: 'REASSIGN' }); setActionReason(''); setReassignCabId('') }}
                             >
                               Reassign
                             </button>
@@ -274,6 +275,27 @@ export default function AdminBookings() {
           </div>
         )}
       </div>
+
+      {detailsBooking && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => setDetailsBooking(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-xl max-h-[85vh] overflow-y-auto" onClick={event => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div><h2 className="text-lg font-bold text-gray-900">Booking Details</h2><p className="text-xs text-gray-500 mt-1">{detailsBooking.bookingId}</p></div>
+              <button type="button" className="text-gray-400 text-xl" onClick={() => setDetailsBooking(null)}>×</button>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div><p className="text-xs text-gray-400">CGM</p><p className="font-medium">{detailsBooking.cgmName}</p><p className="text-gray-500">{detailsBooking.cgmMobile || 'No mobile'}</p></div>
+              <div><p className="text-xs text-gray-400">Driver</p><p className="font-medium">{detailsBooking.driverName}</p></div>
+              <div><p className="text-xs text-gray-400">Project</p><p className="font-medium">{detailsBooking.projectName || detailsBooking.siteLocation}</p></div>
+              <div><p className="text-xs text-gray-400">Cab</p><p className="font-medium">{detailsBooking.cabNumber}</p></div>
+              <div><p className="text-xs text-gray-400">Date and time</p><p className="font-medium">{detailsBooking.bookingDate}</p><p className="text-gray-500">{detailsBooking.startTime}–{detailsBooking.endTime}</p></div>
+              <div><p className="text-xs text-gray-400">Status</p><p className="font-medium">{getDisplayStatus(detailsBooking)}</p><p className="text-gray-500">Driver response: {detailsBooking.driverResponseStatus || '—'}</p></div>
+              <div><p className="text-xs text-gray-400">Created</p><p className="font-medium">{detailsBooking.createdAt ? new Date(detailsBooking.createdAt).toLocaleString() : '—'}</p></div>
+              <div><p className="text-xs text-gray-400">Response deadline</p><p className="font-medium">{detailsBooking.driverResponseDeadline ? new Date(detailsBooking.driverResponseDeadline).toLocaleString() : '—'}</p></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Confirmation Modal */}
       {actionModal && (
