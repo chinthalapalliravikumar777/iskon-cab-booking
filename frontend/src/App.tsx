@@ -21,32 +21,14 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
 
           {/* CGM routes */}
-          <Route
-            path="/cgm"
-            element={<ProtectedRoute allowedRoles={['CGM']}><CGMDashboard /></ProtectedRoute>}
-          />
-          <Route
-            path="/cgm/book"
-            element={<ProtectedRoute allowedRoles={['CGM']}><CGMDashboard /></ProtectedRoute>}
-          />
-          <Route
-            path="/cgm/history"
-            element={<ProtectedRoute allowedRoles={['CGM']}><CGMHistory /></ProtectedRoute>}
-          />
-          <Route
-            path="/cgm/*"
-            element={<ProtectedRoute allowedRoles={['CGM']}><CGMDashboard /></ProtectedRoute>}
-          />
+          <Route path="/cgm"         element={<ProtectedRoute allowedRoles={['CGM']}><CGMDashboard /></ProtectedRoute>} />
+          <Route path="/cgm/book"    element={<ProtectedRoute allowedRoles={['CGM']}><CGMDashboard /></ProtectedRoute>} />
+          <Route path="/cgm/history" element={<ProtectedRoute allowedRoles={['CGM']}><CGMHistory /></ProtectedRoute>} />
+          <Route path="/cgm/*"       element={<ProtectedRoute allowedRoles={['CGM']}><CGMDashboard /></ProtectedRoute>} />
 
           {/* Driver routes */}
-          <Route
-            path="/driver"
-            element={<ProtectedRoute allowedRoles={['DRIVER']}><DriverDashboard /></ProtectedRoute>}
-          />
-          <Route
-            path="/driver/*"
-            element={<ProtectedRoute allowedRoles={['DRIVER']}><DriverDashboard /></ProtectedRoute>}
-          />
+          <Route path="/driver"   element={<ProtectedRoute allowedRoles={['DRIVER']}><DriverDashboard /></ProtectedRoute>} />
+          <Route path="/driver/*" element={<ProtectedRoute allowedRoles={['DRIVER']}><DriverDashboard /></ProtectedRoute>} />
 
           {/* Admin routes — specific pages must come BEFORE the wildcard */}
           <Route path="/admin/cabs"     element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminCabs /></ProtectedRoute>} />

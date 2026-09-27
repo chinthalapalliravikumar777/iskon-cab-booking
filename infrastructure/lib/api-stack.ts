@@ -38,8 +38,6 @@ export class ApiStack extends cdk.Stack {
       projectsTable, profilePhotosBucket, userPool, userPoolClient,
     } = props
 
-    // ── Shared Lambda environment ─────────────────────────────────────────────
-    // WebSocket endpoint is injected after WS API creation (see below)
     const sharedEnv: Record<string, string> = {
       USERS_TABLE:        usersTable.tableName,
       CABS_TABLE:         cabsTable.tableName,
@@ -55,7 +53,6 @@ export class ApiStack extends cdk.Stack {
       FIREBASE_SERVICE_ACCOUNT_JSON: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '',
     }
 
-    // ── Helper: create Lambda + log group ────────────────────────────────────
     const createLambda = (name: string, handlerPath: string, extraEnv?: Record<string, string>) => {
       const logGroup = new logs.LogGroup(this, `${name}LogGroup`, {
         logGroupName: `/aws/lambda/iskon-${name.toLowerCase()}`,
@@ -74,7 +71,6 @@ export class ApiStack extends cdk.Stack {
         logGroup,
       })
 
-      // Grant access to all tables + bucket
       usersTable.grantReadWriteData(fn)
       cabsTable.grantReadWriteData(fn)
       bookingsTable.grantReadWriteData(fn)
@@ -103,6 +99,7 @@ export class ApiStack extends cdk.Stack {
     const cabsFn              = createLambda('Cabs',              'functions/admin/cabs.handler')
     const profilePhotosFn     = createLambda('ProfilePhotos',     'functions/admin/profilePhotos.handler')
     const adminStatsFn        = createLambda('AdminStats',        'functions/admin/stats.handler')
+    // Admin bookings — uses functions/admin/bookings.handler (the full implementation)
     const adminBookingsFn     = createLambda('AdminBookings',     'functions/admin/bookings.handler')
     const seedFn              = createLambda('SeedProjects',      'functions/admin/seedHandler.handler')
     const getNotificationsFn  = createLambda('GetNotifications',  'functions/notifications/getNotifications.handler')
@@ -115,20 +112,17 @@ export class ApiStack extends cdk.Stack {
     const wsDisconnectFn = createLambda('WsDisconnect', 'functions/websocket/disconnect.handler')
     const wsAuthFn       = createLambda('WsAuthorizer', 'functions/websocket/authorizer.handler')
 
-    // ── Cognito permissions ───────────────────────────────────────────────────
     userPool.grant(createUserFn,        'cognito-idp:AdminCreateUser', 'cognito-idp:AdminSetUserPassword', 'cognito-idp:ListUsers')
     userPool.grant(resetUserPasswordFn, 'cognito-idp:AdminSetUserPassword')
     userPool.grant(toggleUserStatusFn,  'cognito-idp:AdminEnableUser', 'cognito-idp:AdminDisableUser')
     userPool.grant(adminStatsFn,        'cognito-idp:ListUsers')
 
-    // ── Cognito JWT Authorizer (HTTP API) ─────────────────────────────────────
     const authorizer = new apigatewayAuthorizers.HttpJwtAuthorizer(
       'CognitoAuthorizer',
       `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`,
       { jwtAudience: [userPoolClient.userPoolClientId] }
     )
 
-    // ── HTTP API ──────────────────────────────────────────────────────────────
     const httpApi = new apigateway.HttpApi(this, 'IskonHttpApi', {
       apiName: 'iskon-cab-booking-api',
       description: 'Iskon Cab Booking HTTP API',
@@ -140,7 +134,6 @@ export class ApiStack extends cdk.Stack {
       },
     })
 
-    // Helper to add a route
     const addRoute = (
       p: string,
       methods: apigateway.HttpMethod[],
@@ -154,45 +147,45 @@ export class ApiStack extends cdk.Stack {
     })
 
     // CGM
-    addRoute('/v1/cgm/cabs/available',   [apigateway.HttpMethod.GET],        getAvailableCabsFn,  'GetAvailableCabsI')
-    addRoute('/v1/cgm/bookings',         [apigateway.HttpMethod.POST],        createBookingFn,    'CreateBookingI')
-    addRoute('/v1/cgm/bookings',         [apigateway.HttpMethod.GET],         getMyBookingsFn,    'GetMyBookingsI')
+    addRoute('/v1/cgm/cabs/available',   [apigateway.HttpMethod.GET],  getAvailableCabsFn, 'GetAvailableCabsI')
+    addRoute('/v1/cgm/bookings',         [apigateway.HttpMethod.POST], createBookingFn,    'CreateBookingI')
+    addRoute('/v1/cgm/bookings',         [apigateway.HttpMethod.GET],  getMyBookingsFn,    'GetMyBookingsI')
 
     // Driver
-    addRoute('/v1/driver/trips/{bookingId}/status', [apigateway.HttpMethod.PATCH], updateTripStatusFn,  'UpdateTripStatusI')
-    addRoute('/v1/driver/trips',                    [apigateway.HttpMethod.GET],   getMyTripsFn,        'GetMyTripsI')
-    addRoute('/v1/driver/cab',                      [apigateway.HttpMethod.GET],   getMyCabFn,          'GetMyCabI')
-    addRoute('/v1/driver/bookings/{bookingId}/decision', [apigateway.HttpMethod.PATCH], respondBookingFn, 'RespondBookingI')
+    addRoute('/v1/driver/trips/{bookingId}/status',       [apigateway.HttpMethod.PATCH], updateTripStatusFn, 'UpdateTripStatusI')
+    addRoute('/v1/driver/trips',                          [apigateway.HttpMethod.GET],   getMyTripsFn,       'GetMyTripsI')
+    addRoute('/v1/driver/cab',                            [apigateway.HttpMethod.GET],   getMyCabFn,         'GetMyCabI')
+    addRoute('/v1/driver/bookings/{bookingId}/decision',  [apigateway.HttpMethod.PATCH], respondBookingFn,   'RespondBookingI')
 
     // Admin — cabs
-    addRoute('/v1/admin/cabs',           [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST], cabsFn,       'CabsI')
-    addRoute('/v1/admin/cabs/{cabId}',   [apigateway.HttpMethod.PATCH],                           cabsFn,       'CabUpdateI')
-    addRoute('/v1/admin/cabs/{cabId}/status', [apigateway.HttpMethod.PATCH],                      releaseCabFn, 'ReleaseCabI')
+    addRoute('/v1/admin/cabs',                [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST], cabsFn,       'CabsI')
+    addRoute('/v1/admin/cabs/{cabId}',        [apigateway.HttpMethod.PATCH],                           cabsFn,       'CabUpdateI')
+    addRoute('/v1/admin/cabs/{cabId}/status', [apigateway.HttpMethod.PATCH],                           releaseCabFn, 'ReleaseCabI')
 
     // Admin — users
-    addRoute('/v1/admin/users',                        [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST], createUserFn,        'UsersI')
-    addRoute('/v1/admin/users/{username}/password',    [apigateway.HttpMethod.PATCH],                           resetUserPasswordFn, 'ResetPassI')
-    addRoute('/v1/admin/users/{username}/status',      [apigateway.HttpMethod.PATCH],                           toggleUserStatusFn,  'ToggleStatusI')
+    addRoute('/v1/admin/users',                     [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST], createUserFn,        'UsersI')
+    addRoute('/v1/admin/users/{username}/password', [apigateway.HttpMethod.PATCH],                           resetUserPasswordFn, 'ResetPassI')
+    addRoute('/v1/admin/users/{username}/status',   [apigateway.HttpMethod.PATCH],                           toggleUserStatusFn,  'ToggleStatusI')
 
     // Admin — bookings
-    addRoute('/v1/admin/bookings',              [apigateway.HttpMethod.GET],   adminBookingsFn, 'AdminBookingsI')
-    addRoute('/v1/admin/bookings/{bookingId}',  [apigateway.HttpMethod.PATCH], adminBookingsFn, 'AdminBookingUpdateI')
+    addRoute('/v1/admin/bookings',             [apigateway.HttpMethod.GET],              adminBookingsFn, 'AdminBookingsI')
+    addRoute('/v1/admin/bookings/{bookingId}', [apigateway.HttpMethod.GET, apigateway.HttpMethod.PATCH], adminBookingsFn, 'AdminBookingDetailI')
 
     // Admin — stats & seed
     addRoute('/v1/admin/stats', [apigateway.HttpMethod.GET],  adminStatsFn, 'AdminStatsI')
     addRoute('/v1/admin/seed',  [apigateway.HttpMethod.POST], seedFn,       'SeedI')
 
     // Projects
-    addRoute('/v1/projects',              [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST], projectsFn, 'ProjectsI')
-    addRoute('/v1/projects/{projectId}',  [apigateway.HttpMethod.PATCH, apigateway.HttpMethod.DELETE], projectsFn, 'ProjectUpdateI')
+    addRoute('/v1/projects',             [apigateway.HttpMethod.GET, apigateway.HttpMethod.POST],          projectsFn, 'ProjectsI')
+    addRoute('/v1/projects/{projectId}', [apigateway.HttpMethod.PATCH, apigateway.HttpMethod.DELETE],      projectsFn, 'ProjectUpdateI')
 
     // Profile photos
     addRoute('/v1/profile-photos/{userId}', [apigateway.HttpMethod.GET, apigateway.HttpMethod.PUT], profilePhotosFn, 'ProfilePhotosI')
 
     // Notifications
-    addRoute('/v1/notifications',                       [apigateway.HttpMethod.GET],   getNotificationsFn, 'GetNotifsI')
-    addRoute('/v1/notifications/{notificationId}/read', [apigateway.HttpMethod.PATCH], markReadFn,         'MarkReadI')
-    addRoute('/v1/notifications/push-token',             [apigateway.HttpMethod.POST],  registerPushTokenFn, 'RegisterPushTokenI')
+    addRoute('/v1/notifications',                        [apigateway.HttpMethod.GET],   getNotificationsFn,  'GetNotifsI')
+    addRoute('/v1/notifications/{notificationId}/read',  [apigateway.HttpMethod.PATCH], markReadFn,          'MarkReadI')
+    addRoute('/v1/notifications/push-token',              [apigateway.HttpMethod.POST],  registerPushTokenFn, 'RegisterPushTokenI')
 
     // ── EventBridge scheduler ─────────────────────────────────────────────────
     new events.Rule(this, 'ExpireBookingsSchedule', {
@@ -203,7 +196,6 @@ export class ApiStack extends cdk.Stack {
     this.apiUrl = httpApi.url!
 
     // ── WebSocket API ─────────────────────────────────────────────────────────
-    // Uses API Gateway V2 WebSocket API for real-time push notifications
     const wsApi = new apigateway.WebSocketApi(this, 'IskonWsApi', {
       apiName: 'iskon-notifications-ws',
       description: 'Real-time notifications WebSocket',
@@ -232,11 +224,8 @@ export class ApiStack extends cdk.Stack {
 
     this.wsUrl = wsStage.url
 
-    // WebSocket endpoint for Lambda-to-client push (PostToConnection)
     const wsCallbackUrl = `https://${wsApi.apiId}.execute-api.${this.region}.amazonaws.com/${wsStageName}`
-    const wsEnv = { WEBSOCKET_ENDPOINT: wsCallbackUrl }
 
-    // Inject WEBSOCKET_ENDPOINT into all Lambdas that need to push notifications
     const pushingLambdas = [
       createBookingFn, updateTripStatusFn, respondBookingFn,
       expireBookingsFn, adminBookingsFn, getNotificationsFn,
@@ -245,7 +234,6 @@ export class ApiStack extends cdk.Stack {
       fn.addEnvironment('WEBSOCKET_ENDPOINT', wsCallbackUrl)
     }
 
-    // Grant those Lambdas permission to call PostToConnection
     const wsMgmtArn = `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.apiId}/${wsStageName}/POST/@connections/*`
     const wsMgmtPolicy = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
@@ -256,7 +244,6 @@ export class ApiStack extends cdk.Stack {
       fn.addToRolePolicy(wsMgmtPolicy)
     }
 
-    // ── CloudFormation Outputs ────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: this.apiUrl,
       description: 'HTTP API URL — set as VITE_API_URL in frontend .env',
